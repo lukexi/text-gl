@@ -10,6 +10,7 @@ import Data.Foldable
 
 data Cube = Cube
         { cubeVAO        :: VertexArrayObject
+        , cubeShader     :: GLProgram
         , cubeIndexCount :: GLsizei
         , cubeUniformMVP :: UniformLocation
         }
@@ -20,6 +21,8 @@ data Cube = Cube
 
 renderCube :: Cube -> M44 GLfloat -> IO ()
 renderCube cube mvp = do
+
+    glUseProgram (fromIntegral (unGLProgram (cubeShader cube)))
 
     let mvpUniformLoc = fromIntegral (unUniformLocation (cubeUniformMVP cube))
     
@@ -36,10 +39,10 @@ renderCube cube mvp = do
 makeCube :: GLProgram -> IO Cube
 makeCube program = do
 
-    aPosition      <- getShaderAttribute program "aPosition"
-    aColor         <- getShaderAttribute program "aColor"
-    aID            <- getShaderAttribute program "aID"
-    uMVP           <- getShaderUniform   program "mvp"
+    aPosition <- getShaderAttribute program "aPosition"
+    aColor    <- getShaderAttribute program "aColor"
+    aID       <- getShaderAttribute program "aID"
+    uMVP      <- getShaderUniform   program "uMVP"
 
     -- Setup a VAO
     vaoCube <- overPtr (glGenVertexArrays 1)
@@ -202,7 +205,8 @@ makeCube program = do
     glBindVertexArray 0
 
     return $ Cube 
-        { cubeVAO = VertexArrayObject vaoCube
+        { cubeVAO        = VertexArrayObject vaoCube
+        , cubeShader     = program
         , cubeIndexCount = fromIntegral (length cubeIndices)
         , cubeUniformMVP = uMVP
         } 
