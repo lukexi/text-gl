@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module GlyphQuad where
 
 import ShaderLoader
@@ -6,7 +7,7 @@ import Graphics.GL
 import Foreign
 import Linear
 import Data.Foldable
-
+import Graphics.GL.Freetype
 
 data GlyphQuad = GlyphQuad
         { glyphQuadVAO            :: VertexArrayObject
@@ -43,8 +44,12 @@ renderGlyphQuad glyphQuad mvp = do
     glBindVertexArray 0
 
 
-makeGlyphQuad :: GLProgram -> TextureID -> (GLfloat, GLfloat, GLfloat, GLfloat) -> IO GlyphQuad
-makeGlyphQuad program textureID (s0, t0, s1, t1) = do
+makeGlyphQuad :: GLProgram -> TextureID -> GlyphMetrics -> (Float, Float) -> Float -> IO (Float, GlyphQuad)
+makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
+    let x0  = xOffset + gmOffsetX + kerning
+        y0  = yOffset + gmOffsetY
+        x1  = x0 + gmWidth
+        y1  = y0 - gmHeight
 
     aPosition <- getShaderAttribute program "aPosition"
     aColor    <- getShaderAttribute program "aColor"
@@ -65,10 +70,10 @@ makeGlyphQuad program textureID (s0, t0, s1, t1) = do
     -- Buffer the glyphQuad vertices
     let glyphQuadVertices = 
             --- front
-            [ -1.0 ,  1.0 ,  0.0  
-            , -1.0 , -1.0 ,  0.0  
-            ,  1.0 , -1.0 ,  0.0  
-            ,  1.0 ,  1.0 ,  0.0 ] :: [GLfloat]
+            [ x0 , y0 , 0.0  
+            , x0 , y1 , 0.0  
+            , x1 , y1 , 0.0  
+            , x1 , y0 , 0.0 ] :: [GLfloat]
 
     vaoGlyphQuadVertices <- overPtr (glGenBuffers 1)
 
@@ -130,10 +135,10 @@ makeGlyphQuad program textureID (s0, t0, s1, t1) = do
 
     -- Buffer the glyphQuad ids
     let glyphQuadTexCoords = 
-            [ s0,t0
-            , s0,t1
-            , s1,t1
-            , s1,t0 ] :: [GLfloat]
+            [ gmS0, gmT0
+            , gmS0, gmT1
+            , gmS1, gmT1
+            , gmS1, gmT0 ] :: [GLfloat]
     -- To visualize the whole atlas:
     -- let glyphQuadTexCoords = 
     --         [ 0,0
@@ -184,13 +189,14 @@ makeGlyphQuad program textureID (s0, t0, s1, t1) = do
     
     glBindVertexArray 0
 
-    return $ GlyphQuad 
+    let advance = xOffset + kerning + gmAdvanceX
+    return (advance, GlyphQuad 
         { glyphQuadVAO              = VertexArrayObject vaoGlyphQuad
         , glyphQuadShader           = program
         , glyphQuadIndexCount       = fromIntegral (length glyphQuadIndices)
         , glyphQuadTextureID        = textureID
         , glyphQuadUniformMVP       = uMVP
         , glyphQuadUniformTexture   = uTexture
-        } 
+        })
 
 

@@ -16,29 +16,38 @@ import GlyphQuad
 -- A test to make sure font rendering works
 -------------------------------------------------------------
 
+resX, resY :: Num a => a
+resX = 1920
+resY = 1080
+
 main :: IO a
 main = do
-
-    let (resX, resY) = (1920, 1080)
 
     win <- setupGLFW "Freetype-GL" resX resY
 
     -- Test Freetype
-    atlas <- newTextureAtlas 512 512 1
+    atlas <- newTextureAtlas 512 512 BitDepth1
     -- font  <- newFontFromFile atlas 100 "freetype-gl/fonts/SourceSansPro-Regular.ttf"
-    font  <- newFontFromFile atlas 100 "freetype-gl/fonts/Vera.ttf"
+    font  <- newFontFromFile atlas 50 "freetype-gl/fonts/Vera.ttf"
 
-    missed <- loadFontGlyphs font "A Quick Brown Fox Jumps Over The Lazy Dog 0123456789"
+    let text = "Qwertyuiop Asdfghjkl Zxcvbnm"
+    missed <- loadFontGlyphs font text
     putStrLn $ "Missed: " ++ show missed
 
     let textureID = TextureID (atlasTextureID atlas)
 
-    a <- getGlyph font 'Q'
-    gms@GlyphMetrics{..} <- getGlyphMetrics a
-    -- print gms
-
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    quad <- makeGlyphQuad glyphQuadProg textureID (gmS0, gmT0, gmS1, gmT1)
+    
+    (quads, xOffset, _) <- foldM (\(quads, xOffset, maybeLastChar) thisChar -> do
+        glyph <- getGlyph font thisChar
+        kerning <- case maybeLastChar of
+            Nothing       -> return 0
+            Just lastChar -> getGlyphKerning glyph lastChar
+        
+        glyphMetrics            <- getGlyphMetrics glyph
+        (newXOffset, glyphQuad) <- makeGlyphQuad glyphQuadProg textureID glyphMetrics (xOffset, 0) kerning
+        return (glyphQuad:quads, newXOffset, Just thisChar)
+        ) ([], 0, Nothing) text
 
     -- Scene rendering setup
     -- cubeProg <- createShaderProgram "test/cube.vert" "test/cube.frag"
@@ -49,11 +58,11 @@ main = do
     glEnable GL_DEPTH_TEST
 
     forever $ 
-        mainLoop win quad
+        mainLoop win quads (-xOffset/2)
 
 
-mainLoop :: GLFW.Window -> GlyphQuad -> IO ()
-mainLoop win glyphQuad = do
+mainLoop :: GLFW.Window -> [GlyphQuad] -> Float -> IO ()
+mainLoop win glyphQuads xOffset = do
     -- glGetErrors
 
     -- Get mouse/keyboard/OS events from GLFW
@@ -65,16 +74,16 @@ mainLoop win glyphQuad = do
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
     -- Render our scene
-    let projection = perspective 45 (1920/1080) 0.01 1000
-        model      = mkTransformation 1 (V3 0 0 (-4))
-        view       = lookAt (V3 0 2 0) (V3 0 0 (-4)) (V3 0 1 0)
+    let projection = perspective 45 (resX/resY) 0.01 1000
+        model      = mkTransformation 1 (V3 (realToFrac xOffset) 0 (-4))
+        view       = lookAt (V3 0 2 500) (V3 0 0 (-4)) (V3 0 1 0)
         mvp        = projection !*! view !*! model
         (x,y,w,h)  = (0,0,1920,1080)
 
     glViewport x y w h
 
     -- renderCube cube mvp
-    renderGlyphQuad glyphQuad mvp
+    forM_ glyphQuads (\glyphQuad -> renderGlyphQuad glyphQuad mvp)
     
     GLFW.swapBuffers win
 
