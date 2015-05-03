@@ -1,13 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
-module GlyphQuad where
+module Graphics.GL.Freetype.GlyphQuad where
 
-import ShaderLoader
+import Graphics.GL.Pal.Shader
+import Graphics.GL.Pal.Types
 
 import Graphics.GL
 import Foreign
 import Linear
 import Data.Foldable
-import Graphics.GL.Freetype
+import Graphics.GL.Freetype.API
 
 data GlyphQuad = GlyphQuad
         { glyphQuadVAO            :: VertexArrayObject

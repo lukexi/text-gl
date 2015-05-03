@@ -1,10 +1,11 @@
 #version 330 core
 
+uniform mat4 uMVP;
+
 in vec3 aPosition;
 in vec4 aColor;
 in vec2 aTexCoord;
 
-uniform mat4 uMVP;
 out vec4 vColor;
 out vec2 vTexCoord;
 

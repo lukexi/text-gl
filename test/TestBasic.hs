@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 import qualified Graphics.UI.GLFW as GLFW
 import Graphics.GL
+import Graphics.GL.Pal
 import Graphics.GL.Freetype
 
 import Data.Bits
@@ -8,9 +9,6 @@ import Control.Monad
 import Linear
 
 import SetupGLFW
-import ShaderLoader
--- import Cube
-import GlyphQuad
 
 -------------------------------------------------------------
 -- A test to make sure font rendering works
