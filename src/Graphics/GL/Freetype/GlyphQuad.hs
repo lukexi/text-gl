@@ -3,25 +3,29 @@ module Graphics.GL.Freetype.GlyphQuad where
 
 import Graphics.GL.Pal.Shader
 import Graphics.GL.Pal.Types
+import Graphics.GL.Freetype.API
 
 import Graphics.GL
 import Foreign
 import Linear
 import Data.Foldable
-import Graphics.GL.Freetype.API
+
+import Control.Monad
+import qualified Data.Map as Map
+import Data.Map (Map)
 
 data GlyphQuad = GlyphQuad
-        { glyphQuadVAO            :: VertexArrayObject
-        , glyphQuadShader         :: GLProgram
-        , glyphQuadIndexCount     :: GLsizei
-        , glyphQuadTextureID      :: TextureID
-        , glyphQuadUniformMVP     :: UniformLocation
-        , glyphQuadUniformTexture :: UniformLocation
-        }
+    { glyphQuadVAO            :: VertexArrayObject
+    , glyphQuadShader         :: GLProgram
+    , glyphQuadIndexCount     :: GLsizei
+    , glyphQuadTextureID      :: TextureID
+    , glyphQuadUniformMVP     :: UniformLocation
+    , glyphQuadUniformTexture :: UniformLocation
+    }
 
-----------------------------------------------------------
--- Make GlyphQuad
-----------------------------------------------------------
+type GlyphQuads = Map Char GlyphQuad
+
+-- TODO cache the GlyphQuads here when creating the font
 
 renderGlyphQuad :: GlyphQuad -> M44 GLfloat -> IO ()
 renderGlyphQuad glyphQuad mvp = do
@@ -44,6 +48,27 @@ renderGlyphQuad glyphQuad mvp = do
 
     glBindVertexArray 0
 
+----------------------------------------------------------
+-- Make GlyphQuad
+----------------------------------------------------------
+
+glypyQuadsFromText :: String -> Font -> TextureAtlas -> GLProgram -> IO ([GlyphQuad], Float)
+glypyQuadsFromText text font atlas glyphQuadProg = do
+    let textureID = TextureID (atlasTextureID atlas)
+    (quads, xOffset, _) <- foldM (\(quads, xOffset, maybeLastChar) thisChar -> do
+        glyph <- getGlyph font thisChar
+        kerning <- case maybeLastChar of
+            Nothing       -> return 0
+            Just lastChar -> getGlyphKerning glyph lastChar
+        
+        glyphMetrics            <- getGlyphMetrics glyph
+        (newXOffset, glyphQuad) <- makeGlyphQuad glyphQuadProg textureID glyphMetrics (xOffset, 0) kerning
+        return (glyphQuad:quads, newXOffset, Just thisChar)
+        ) ([], 0, Nothing) text
+    return (quads, xOffset)
+
+
+
 
 makeGlyphQuad :: GLProgram -> TextureID -> GlyphMetrics -> (Float, Float) -> Float -> IO (Float, GlyphQuad)
 makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
@@ -52,7 +77,7 @@ makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
         x1  = x0 + gmWidth
         y1  = y0 - gmHeight
 
-    aPosition <- getShaderAttribute program "aPosition"
+    aVertex   <- getShaderAttribute program "aVertex"
     aColor    <- getShaderAttribute program "aColor"
     aTexCoord <- getShaderAttribute program "aTexCoord"
     uMVP      <- getShaderUniform   program "uMVP"
@@ -87,10 +112,10 @@ makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
             glBufferData GL_ARRAY_BUFFER glyphQuadVerticesSize (castPtr glyphQuadVerticesPtr) GL_STATIC_DRAW 
 
     -- Describe our vertices array to OpenGL
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aPosition))
+    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aVertex))
 
     glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aPosition)) -- attribute
+        (fromIntegral (unAttributeLocation aVertex)) -- attribute
         3                 -- number of elements per vertex, here (x,y,z)
         GL_FLOAT          -- the type of each element
         GL_FALSE          -- don't normalize

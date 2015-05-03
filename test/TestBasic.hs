@@ -18,6 +18,8 @@ resX, resY :: Num a => a
 resX = 1920
 resY = 1080
 
+
+
 main :: IO a
 main = do
 
@@ -31,21 +33,10 @@ main = do
     let text = "Qwertyuiop Asdfghjkl Zxcvbnm"
     missed <- loadFontGlyphs font text
     putStrLn $ "Missed: " ++ show missed
-
-    let textureID = TextureID (atlasTextureID atlas)
-
+    
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     
-    (quads, xOffset, _) <- foldM (\(quads, xOffset, maybeLastChar) thisChar -> do
-        glyph <- getGlyph font thisChar
-        kerning <- case maybeLastChar of
-            Nothing       -> return 0
-            Just lastChar -> getGlyphKerning glyph lastChar
-        
-        glyphMetrics            <- getGlyphMetrics glyph
-        (newXOffset, glyphQuad) <- makeGlyphQuad glyphQuadProg textureID glyphMetrics (xOffset, 0) kerning
-        return (glyphQuad:quads, newXOffset, Just thisChar)
-        ) ([], 0, Nothing) text
+    (quads, xOffset) <- glypyQuadsFromText text font atlas glyphQuadProg
 
     -- Scene rendering setup
     -- cubeProg <- createShaderProgram "test/cube.vert" "test/cube.frag"
