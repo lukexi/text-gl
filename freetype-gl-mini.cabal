@@ -50,4 +50,4 @@ test-suite basic
     gl-pal,
     GLFW-b,
     mtl,
-    bytestring, text, linear, time
+    bytestring, text, linear, time, random

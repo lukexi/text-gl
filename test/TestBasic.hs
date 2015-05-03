@@ -6,6 +6,7 @@ import Graphics.GL.Freetype
 
 import Data.Bits
 import Control.Monad
+import System.Random
 import Linear
 
 import SetupGLFW
@@ -25,18 +26,9 @@ main = do
 
     win <- setupGLFW "Freetype-GL" resX resY
 
-    -- Test Freetype
-    atlas <- newTextureAtlas 512 512 BitDepth1
-    -- font  <- newFontFromFile atlas 100 "freetype-gl/fonts/SourceSansPro-Regular.ttf"
-    font  <- newFontFromFile atlas 50 "freetype-gl/fonts/Vera.ttf"
-
-    let text = "Qwertyuiop Asdfghjkl Zxcvbnm"
-    missed <- loadFontGlyphs font text
-    putStrLn $ "Missed: " ++ show missed
-    
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     
-    (quads, xOffset) <- glypyQuadsFromText text font atlas glyphQuadProg
+    fontGlyphs <- makeGlyphs "freetype-gl/fonts/Vera.ttf" 50 glyphQuadProg asciiChars
 
     -- Scene rendering setup
     -- cubeProg <- createShaderProgram "test/cube.vert" "test/cube.frag"
@@ -47,11 +39,11 @@ main = do
     glEnable GL_DEPTH_TEST
 
     forever $ 
-        mainLoop win quads (-xOffset/2)
+        mainLoop win fontGlyphs 
 
 
-mainLoop :: GLFW.Window -> [GlyphQuad] -> Float -> IO ()
-mainLoop win glyphQuads xOffset = do
+mainLoop :: GLFW.Window -> FontGlyphs -> IO ()
+mainLoop win fontGlyphs = do
     -- glGetErrors
 
     -- Get mouse/keyboard/OS events from GLFW
@@ -61,6 +53,9 @@ mainLoop win glyphQuads xOffset = do
     glClear ( GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT )
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+
+    let xOffset = 0
+        -- (-xOffset/2)
 
     -- Render our scene
     let projection = perspective 45 (resX/resY) 0.01 1000
@@ -72,7 +67,8 @@ mainLoop win glyphQuads xOffset = do
     glViewport x y w h
 
     -- renderCube cube mvp
-    forM_ glyphQuads (\glyphQuad -> renderGlyphQuad glyphQuad mvp)
+    frameChars <- replicateM 10 $ randomRIO (' ','~')
+    renderText fontGlyphs frameChars mvp
     
     GLFW.swapBuffers win
 

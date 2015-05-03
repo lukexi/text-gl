@@ -1,6 +1,7 @@
 #version 330 core
 
 uniform mat4 uMVP;
+uniform float uXOffset;
 
 in vec3 aVertex;
 in vec4 aColor;
@@ -11,7 +12,8 @@ out vec2 vTexCoord;
 
 void main() { 
 
-    gl_Position = uMVP * vec4( aVertex , 1.0 );
+    vec4 finalVertex = vec4( aVertex.x + uXOffset, aVertex.y, aVertex.z, 1.0);
+    gl_Position = uMVP * finalVertex;
 
     vColor    = aColor;
     vTexCoord = aTexCoord;

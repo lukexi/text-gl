@@ -12,7 +12,7 @@ import Data.Foldable
 
 import Control.Monad
 import qualified Data.Map as Map
-import Data.Map (Map)
+import Data.Map (Map, (!))
 
 data GlyphQuad = GlyphQuad
     { glyphQuadVAO            :: VertexArrayObject
@@ -21,14 +21,38 @@ data GlyphQuad = GlyphQuad
     , glyphQuadTextureID      :: TextureID
     , glyphQuadUniformMVP     :: UniformLocation
     , glyphQuadUniformTexture :: UniformLocation
+    , glyphQuadUniformXOffset :: UniformLocation
+    , glyphMetrics            :: GlyphMetrics
     }
 
 type GlyphQuads = Map Char GlyphQuad
 
--- TODO cache the GlyphQuads here when creating the font
+data FontGlyphs = FontGlyphs 
+    { fgQuads :: GlyphQuads
+    , fgFont  :: Font
+    , fgAtlas :: TextureAtlas
+    }
 
-renderGlyphQuad :: GlyphQuad -> M44 GLfloat -> IO ()
-renderGlyphQuad glyphQuad mvp = do
+-- Aka ASCII codes 32-126
+asciiChars :: String
+asciiChars = [' '..'~']
+
+makeGlyphs :: String -> Float -> GLProgram -> String -> IO FontGlyphs
+makeGlyphs fontFile pointSize glyphProg characters = do
+    -- Create an atlas to hold the characters
+    atlas <- newTextureAtlas 512 512 BitDepth1
+    -- Create a font and associate it with the atlas
+    font  <- newFontFromFile atlas pointSize fontFile
+    -- Load the characters into the atlas
+    missed <- loadFontGlyphs font characters
+    putStrLn $ "Missed: " ++ show missed
+    -- Cache the quads that will render each character
+    quads <- glypyQuadsFromText characters font atlas glyphProg
+
+    return FontGlyphs { fgQuads = quads, fgFont = font, fgAtlas = atlas }
+
+renderGlyphQuad :: GlyphQuad -> Float -> M44 GLfloat -> IO ()
+renderGlyphQuad glyphQuad xOffset mvp = do
 
     glBindTexture GL_TEXTURE_2D (unTextureID (glyphQuadTextureID glyphQuad))
 
@@ -36,11 +60,13 @@ renderGlyphQuad glyphQuad mvp = do
 
     let mvpUniformLoc = fromIntegral (unUniformLocation (glyphQuadUniformMVP glyphQuad))
         textureUniformLoc = fromIntegral (unUniformLocation (glyphQuadUniformTexture glyphQuad))
+        xOffsetUniformLoc = fromIntegral (unUniformLocation (glyphQuadUniformXOffset glyphQuad))
     
     withArray (concatMap toList (transpose mvp)) (\mvpPointer ->
         glUniformMatrix4fv mvpUniformLoc 1 GL_FALSE mvpPointer)
 
     glUniform1i textureUniformLoc 0
+    glUniform1f xOffsetUniformLoc xOffset
 
     glBindVertexArray (unVertexArrayObject (glyphQuadVAO glyphQuad))
 
@@ -52,28 +78,38 @@ renderGlyphQuad glyphQuad mvp = do
 -- Make GlyphQuad
 ----------------------------------------------------------
 
-glypyQuadsFromText :: String -> Font -> TextureAtlas -> GLProgram -> IO ([GlyphQuad], Float)
+glypyQuadsFromText :: String -> Font -> TextureAtlas -> GLProgram -> IO GlyphQuads
 glypyQuadsFromText text font atlas glyphQuadProg = do
     let textureID = TextureID (atlasTextureID atlas)
-    (quads, xOffset, _) <- foldM (\(quads, xOffset, maybeLastChar) thisChar -> do
-        glyph <- getGlyph font thisChar
+    foldM (\quads character -> do
+        glyph        <- getGlyph font character
+        glyphMetrics <- getGlyphMetrics glyph
+        glyphQuad    <- makeGlyphQuad glyphQuadProg textureID glyphMetrics
+        return $ Map.insert character glyphQuad quads
+        ) Map.empty text
+
+renderText :: FontGlyphs -> String -> M44 GLfloat -> IO Float
+renderText FontGlyphs{..} text mvp = do
+    (xOffset, _) <- foldM (\(xOffset, maybeLastChar) thisChar -> do
+        glyph <- getGlyph fgFont thisChar
         kerning <- case maybeLastChar of
             Nothing       -> return 0
             Just lastChar -> getGlyphKerning glyph lastChar
-        
-        glyphMetrics            <- getGlyphMetrics glyph
-        (newXOffset, glyphQuad) <- makeGlyphQuad glyphQuadProg textureID glyphMetrics (xOffset, 0) kerning
-        return (glyphQuad:quads, newXOffset, Just thisChar)
-        ) ([], 0, Nothing) text
-    return (quads, xOffset)
 
+        let glyphQuad   = fgQuads ! thisChar
+            charXOffset = xOffset + kerning
+            nextXOffset = charXOffset + gmAdvanceX (glyphMetrics glyphQuad)
 
+        renderGlyphQuad glyphQuad xOffset mvp
 
+        return (nextXOffset, Just thisChar)
+        ) (0, Nothing) text
+    return xOffset
 
-makeGlyphQuad :: GLProgram -> TextureID -> GlyphMetrics -> (Float, Float) -> Float -> IO (Float, GlyphQuad)
-makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
-    let x0  = xOffset + gmOffsetX + kerning
-        y0  = yOffset + gmOffsetY
+makeGlyphQuad :: GLProgram -> TextureID -> GlyphMetrics -> IO GlyphQuad
+makeGlyphQuad program textureID metrics@GlyphMetrics{..} = do
+    let x0  = gmOffsetX
+        y0  = gmOffsetY
         x1  = x0 + gmWidth
         y1  = y0 - gmHeight
 
@@ -82,6 +118,7 @@ makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
     aTexCoord <- getShaderAttribute program "aTexCoord"
     uMVP      <- getShaderUniform   program "uMVP"
     uTexture  <- getShaderUniform   program "uTexture"
+    uXOffset  <- getShaderUniform   program "uXOffset"
 
     -- Setup a VAO
     vaoGlyphQuad <- overPtr (glGenVertexArrays 1)
@@ -215,14 +252,16 @@ makeGlyphQuad program textureID GlyphMetrics{..} (xOffset, yOffset) kerning = do
     
     glBindVertexArray 0
 
-    let advance = xOffset + kerning + gmAdvanceX
-    return (advance, GlyphQuad 
+    
+    return GlyphQuad 
         { glyphQuadVAO              = VertexArrayObject vaoGlyphQuad
         , glyphQuadShader           = program
         , glyphQuadIndexCount       = fromIntegral (length glyphQuadIndices)
         , glyphQuadTextureID        = textureID
         , glyphQuadUniformMVP       = uMVP
         , glyphQuadUniformTexture   = uTexture
-        })
+        , glyphQuadUniformXOffset   = uXOffset
+        , glyphMetrics              = metrics
+        }
 
 
