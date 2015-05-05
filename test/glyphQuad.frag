@@ -1,15 +1,16 @@
 #version 330 core
 
-in vec4 vColor;
 in vec2 vTexCoord;
+in vec3 vNormal;
 
 out vec4 color;
 
 uniform sampler2D uTexture;
 
 void main() {
+
   float a = texture(uTexture, vTexCoord).r;
-  color = vec4(vColor.rgb, vColor.a*a);
+  color = vec4(1,1,1, a);
   
   // Dump the texture contents to color:
   // color = texture(uTexture, vTexCoord);
