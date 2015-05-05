@@ -28,6 +28,9 @@ library
   hs-source-dirs:      src
   default-language:    Haskell2010
   extra-libraries:     freetype
+  if os(windows)
+    extra-lib-dirs: c:\msys64\mingw64\lib
+    include-dirs: C:\msys64\mingw64\include
   c-sources:
     cbits/helpers.c
     freetype-gl/texture-font.c

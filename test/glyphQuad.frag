@@ -10,7 +10,7 @@ uniform sampler2D uTexture;
 void main() {
 
   float a = texture(uTexture, vTexCoord).r;
-  color = vec4(1,1,1, a);
+  color = vec4(vNormal, a);
   
   // Dump the texture contents to color:
   // color = texture(uTexture, vTexCoord);
