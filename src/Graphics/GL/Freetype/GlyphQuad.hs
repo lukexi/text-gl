@@ -3,7 +3,7 @@ module Graphics.GL.Freetype.GlyphQuad where
 
 import Graphics.GL.Pal.Shader
 import Graphics.GL.Pal.Types
-import Graphics.GL.Freetype.API
+import qualified Graphics.GL.Freetype.API as FG
 
 import Graphics.GL
 import Foreign
@@ -16,15 +16,15 @@ import Data.Map (Map, (!))
 data GlyphQuad = GlyphQuad
     { glyphQuadVAO            :: VertexArrayObject
     , glyphQuadIndexCount     :: GLsizei
-    , glyphMetrics            :: GlyphMetrics
+    , glyphMetrics            :: FG.GlyphMetrics
     }
 
 type GlyphQuads = Map Char GlyphQuad
 
-data FontGlyphs = FontGlyphs 
+data Font = Font 
     { fgQuads                 :: GlyphQuads
-    , fgFont                  :: Font
-    , fgAtlas                 :: TextureAtlas
+    , fgFont                  :: FG.Font
+    , fgAtlas                 :: FG.TextureAtlas
     , fgTextureID             :: TextureID
     , fgUniformModel          :: UniformLocation
     , fgUniformViewProjection :: UniformLocation
@@ -37,26 +37,29 @@ data FontGlyphs = FontGlyphs
 asciiChars :: String
 asciiChars = [' '..'~']
 
-makeGlyphs :: String -> Float -> GLProgram -> String -> IO FontGlyphs
-makeGlyphs fontFile pointSize glyphProg characters = do
+makeGlyphs :: String -> Float -> GLProgram -> IO Font
+makeGlyphs fontFile pointSize glyphProg = makeGlyphsFromChars fontFile pointSize glyphProg asciiChars
+
+makeGlyphsFromChars :: String -> Float -> GLProgram -> String -> IO Font
+makeGlyphsFromChars fontFile pointSize glyphProg characters = do
     -- Create an atlas to hold the characters
-    atlas <- newTextureAtlas 1024 1024 BitDepth1
+    atlas <- FG.newTextureAtlas 1024 1024 FG.BitDepth1
     -- Create a font and associate it with the atlas
-    font  <- newFontFromFile atlas pointSize fontFile
+    font  <- FG.newFontFromFile atlas pointSize fontFile
     -- Load the characters into the atlas
-    missed <- loadFontGlyphs font characters
+    missed <- FG.loadFontGlyphs font characters
     putStrLn $ "Missed: " ++ show missed
     -- Cache the quads that will render each character
     quads <- glypyQuadsFromText characters font glyphProg
 
-    let textureID = TextureID (atlasTextureID atlas)
+    let textureID = TextureID (FG.atlasTextureID atlas)
 
     uModel          <- getShaderUniform glyphProg "uModel"
     uViewProjection <- getShaderUniform glyphProg "uViewProjection"
     uTexture        <- getShaderUniform glyphProg "uTexture"
     uXOffset        <- getShaderUniform glyphProg "uXOffset"
 
-    return FontGlyphs 
+    return Font 
         { fgQuads = quads
         , fgFont = font
         , fgAtlas = atlas 
@@ -81,17 +84,17 @@ renderGlyphQuad glyphQuad = do
 -- Make GlyphQuad
 ----------------------------------------------------------
 
-glypyQuadsFromText :: String -> Font -> GLProgram -> IO GlyphQuads
+glypyQuadsFromText :: String -> FG.Font -> GLProgram -> IO GlyphQuads
 glypyQuadsFromText text font glyphQuadProg = 
     foldM (\quads character -> do
-        glyph        <- getGlyph font character
-        glyphMetrics <- getGlyphMetrics glyph
+        glyph        <- FG.getGlyph font character
+        glyphMetrics <- FG.getGlyphMetrics glyph
         glyphQuad    <- makeGlyphQuad glyphQuadProg glyphMetrics
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: FontGlyphs -> String -> M44 GLfloat -> IO Float
-renderText FontGlyphs{..} text model = do
+renderText :: Font -> String -> M44 GLfloat -> IO Float
+renderText Font{..} text model = do
 
     glBindTexture GL_TEXTURE_2D (unTextureID fgTextureID)
 
@@ -105,14 +108,14 @@ renderText FontGlyphs{..} text model = do
     glUniform1i textureUniformLoc 0
 
     (xOffset, _) <- foldM (\(lastXOffset, maybeLastChar) thisChar -> do
-        glyph <- getGlyph fgFont thisChar
+        glyph <- FG.getGlyph fgFont thisChar
         kerning <- case maybeLastChar of
             Nothing       -> return 0
-            Just lastChar -> getGlyphKerning glyph lastChar
+            Just lastChar -> FG.getGlyphKerning glyph lastChar
 
         let glyphQuad   = fgQuads ! thisChar
             charXOffset = lastXOffset + kerning
-            nextXOffset = charXOffset + gmAdvanceX (glyphMetrics glyphQuad)
+            nextXOffset = charXOffset + FG.gmAdvanceX (glyphMetrics glyphQuad)
 
         glUniform1f xOffsetUniformLoc charXOffset
         renderGlyphQuad glyphQuad
@@ -121,8 +124,8 @@ renderText FontGlyphs{..} text model = do
         ) (0, Nothing) text
     return xOffset
 
-makeGlyphQuad :: GLProgram -> GlyphMetrics -> IO GlyphQuad
-makeGlyphQuad program metrics@GlyphMetrics{..} = do
+makeGlyphQuad :: GLProgram -> FG.GlyphMetrics -> IO GlyphQuad
+makeGlyphQuad program metrics@FG.GlyphMetrics{..} = do
     let x0  = gmOffsetX
         y0  = gmOffsetY
         x1  = x0 + gmWidth
@@ -239,9 +242,9 @@ makeGlyphQuad program metrics@GlyphMetrics{..} = do
         0                 -- no extra data between each position
         nullPtr           -- offset of first element
 
-    ----------------
+    ---------------------
     -- GlyphQuad Indicies
-    ----------------
+    ---------------------
 
     -- Buffer the glyphQuad indices
     let glyphQuadIndices = 

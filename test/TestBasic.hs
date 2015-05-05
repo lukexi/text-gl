@@ -27,17 +27,17 @@ main = do
     win <- setupGLFW "Freetype-GL" resX resY
 
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    fontGlyphs    <- makeGlyphs "freetype-gl/fonts/Vera.ttf" 50 glyphQuadProg asciiChars
+    font          <- makeGlyphs "freetype-gl/fonts/Vera.ttf" 50 glyphQuadProg
 
     glClearColor 0 0.1 0.1 1
     glEnable GL_DEPTH_TEST
 
     forever $ 
-        mainLoop win fontGlyphs 
+        mainLoop win font 
 
 
-mainLoop :: GLFW.Window -> FontGlyphs -> IO ()
-mainLoop win fontGlyphs = do
+mainLoop :: GLFW.Window -> Font -> IO ()
+mainLoop win font = do
     -- glGetErrors
 
     -- Get mouse/keyboard/OS events from GLFW
@@ -59,11 +59,11 @@ mainLoop win fontGlyphs = do
 
     glViewport x y w h
 
-    uniformM44 (fgUniformViewProjection fontGlyphs) (projection !*! view)
+    uniformM44 (fgUniformViewProjection font) (projection !*! view)
 
     -- renderCube cube mvp
     frameChars <- replicateM 10 $ randomRIO (' ','~')
-    renderText fontGlyphs frameChars model
+    renderText font frameChars model
     
     GLFW.swapBuffers win
 
