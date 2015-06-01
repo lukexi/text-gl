@@ -27,7 +27,10 @@ library
     base >=4.8 && <4.9, gl, linear, gl-pal, containers
   hs-source-dirs:      src
   default-language:    Haskell2010
-  extra-libraries:     freetype-6
+  if os(windows)
+    extra-libraries:     freetype-6
+  else
+    extra-libraries:     freetype
   if os(windows)
     extra-lib-dirs: c:\msys64\mingw64\bin
     include-dirs: C:\msys64\mingw64\include
