@@ -4,7 +4,6 @@ import Graphics.GL
 import Graphics.GL.Pal
 import Graphics.GL.Freetype
 
-import Data.Bits
 import Control.Monad
 import System.Random
 import Linear
@@ -53,7 +52,7 @@ mainLoop win font = do
 
     -- Render our scene
     let projection = perspective 45 (resX/resY) 0.01 1000
-        model      = mkTransformation 1 (V3 (realToFrac xOffset) 0 (-4))
+        model      = mkTransformation 1 (V3 xOffset 0 (-4))
         view       = lookAt (V3 0 2 500) (V3 0 0 (-4)) (V3 0 1 0)
         (x,y,w,h)  = (0,0,1920,1080)
 
@@ -63,7 +62,7 @@ mainLoop win font = do
 
     -- renderCube cube mvp
     frameChars <- replicateM 10 $ randomRIO (' ','~')
-    renderText font frameChars model
+    _ <- renderText font frameChars model
     
     GLFW.swapBuffers win
 
