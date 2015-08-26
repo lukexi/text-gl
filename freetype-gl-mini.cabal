@@ -27,6 +27,8 @@ library
     base >=4.8 && <4.9, gl, linear, gl-pal, containers
   hs-source-dirs:      src
   default-language:    Haskell2010
+  ghc-prof-options:    -Wall -O2 -fprof-auto
+  ghc-options:         -Wall -O2
   if os(windows)
     extra-libraries:     freetype-6
   else
