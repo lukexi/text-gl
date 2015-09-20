@@ -58,7 +58,7 @@ mainLoop win font = do
 
     glViewport x y w h
 
-    uniformM44 (fgUniformViewProjection font) (projection !*! view)
+    uniformM44 (uViewProjection (fgUniforms font)) (projection !*! view)
 
     -- renderCube cube mvp
     frameChars <- replicateM 10 $ randomRIO (' ','~')
