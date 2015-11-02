@@ -20,8 +20,8 @@ import Control.Monad.State
 -------------------------------------------------------------
 
 resX, resY :: Num a => a
-resX = 1920
-resY = 1080
+resX = 1024
+resY = 768
 
 -- TODO use some zippers here!
 data AppState = AppState 
@@ -65,15 +65,15 @@ mainLoop win events font = do
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    let xOffset = (-1)
+    let xOffset = (-5)
         -- (-xOffset/2)
 
     -- Render our scene
     let projection44 = perspective 45 (resX/resY) 0.01 1000
         model44      = mkTransformation 1 (V3 xOffset 0 (-4))
         view44       = lookAt (V3 0 2 500) (V3 0 0 (-4)) (V3 0 1 0)
-        (x,y,w,h)  = (0,0,1920,1080)
 
+    (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
 
     uniformM44 (uViewProjection (fgUniforms font)) (projection44 !*! view44)
