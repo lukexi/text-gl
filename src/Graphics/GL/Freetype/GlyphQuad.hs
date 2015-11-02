@@ -10,6 +10,7 @@ import Linear
 import Data.Data
 
 import Control.Monad
+import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
 
@@ -70,7 +71,7 @@ makeGlyphsFromChars fontFile pointSize glyphProg characters = do
         , fgShader    = glyphProg
         }
 
-renderGlyphQuad :: GlyphQuad -> IO ()
+renderGlyphQuad :: MonadIO m => GlyphQuad -> m ()
 renderGlyphQuad glyphQuad = do
 
     glBindVertexArray (unVertexArrayObject (glyphQuadVAO glyphQuad))
@@ -92,7 +93,7 @@ glypyQuadsFromText text font glyphQuadProg =
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: Font -> String -> M44 GLfloat -> IO Float
+renderText :: MonadIO m => Font -> String -> M44 GLfloat -> m Float
 renderText Font{..} text model = do
 
     glBindTexture GL_TEXTURE_2D (unTextureID fgTextureID)
@@ -104,10 +105,10 @@ renderText Font{..} text model = do
     uniformI   (uTexture fgUniforms) 0
 
     (xOffset, _) <- foldM (\(lastXOffset, maybeLastChar) thisChar -> do
-        glyph <- FG.getGlyph fgFont thisChar
+        glyph <- liftIO $ FG.getGlyph fgFont thisChar
         kerning <- case maybeLastChar of
             Nothing       -> return 0
-            Just lastChar -> FG.getGlyphKerning glyph lastChar
+            Just lastChar -> liftIO $ FG.getGlyphKerning glyph lastChar
 
         let glyphQuad   = fgQuads ! thisChar
             charXOffset = lastXOffset + kerning
