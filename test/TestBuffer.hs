@@ -10,6 +10,7 @@ import Graphics.GL.Freetype
 import Control.Lens
 import Control.Monad
 import Control.Monad.State
+import Halive.Utils
 -- import System.Random
 -- import Linear
 
@@ -35,7 +36,7 @@ newAppState = AppState { _appLines = mempty }
 main :: IO ()
 main = do
 
-    (win, events) <- createWindow "Freetype-GL" resX resY
+    (win, events) <- reacquire 0 $ createWindow "Freetype-GL" resX resY
 
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     font          <- makeGlyphs "freetype-gl/fonts/Vera.ttf" 50 glyphQuadProg
@@ -49,6 +50,8 @@ main = do
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> Font -> m ()
 mainLoop win events font = do
+    (x,y,w,h) <- getWindowViewport win
+    glViewport x y w h
     -- glGetErrors
 
     -- Get mouse/keyboard/OS events from GLFW
@@ -56,7 +59,8 @@ mainLoop win events font = do
         closeOnEscape win e
 
         case e of
-            Character char -> appLines <>= [char]
+            Character char -> 
+                appLines <>= [char]
             _ -> return ()
         onKeyDown Key'Backspace e $ appLines %= \cs -> if null cs then "" else init cs
 
@@ -65,22 +69,19 @@ mainLoop win events font = do
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    let xOffset = (-5)
+    let xOffset = (-250)
         -- (-xOffset/2)
 
     -- Render our scene
-    let projection44 = perspective 45 (resX/resY) 0.01 1000
-        model44      = mkTransformation 1 (V3 xOffset 0 (-4))
-        view44       = lookAt (V3 0 2 500) (V3 0 0 (-4)) (V3 0 1 0)
+    let projection44 = perspective 45 (fromIntegral w/fromIntegral h) 0.01 1000
+        view44       = lookAt (V3 0 0 500) (V3 0 0 (-4)) (V3 0 1 0)
+        model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 xOffset 0 (-4))
 
-    (x,y,w,h) <- getWindowViewport win
-    glViewport x y w h
-
-    uniformM44 (uViewProjection (fgUniforms font)) (projection44 !*! view44)
+    
 
     -- renderCube cube mvp
     frameChars <- use appLines
-    _ <- liftIO $ renderText font frameChars model44
+    _ <- liftIO $ renderText font frameChars (projection44 !*! view44 !*! model44)
     
     swapBuffers win
 

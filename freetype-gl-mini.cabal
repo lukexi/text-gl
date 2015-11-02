@@ -76,4 +76,4 @@ test-suite buffer
     glfw-pal,
     GLFW-b,
     mtl,
-    bytestring, text, linear, time, random, lens
+    bytestring, text, linear, time, random, lens, halive

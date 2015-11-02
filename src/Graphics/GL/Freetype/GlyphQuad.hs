@@ -23,12 +23,10 @@ data GlyphQuad = GlyphQuad
 type GlyphQuads = Map Char GlyphQuad
 
 data GlyphUniforms = GlyphUniforms
-    { uModel          :: UniformLocation (M44 GLfloat)
-    , uViewProjection :: UniformLocation (M44 GLfloat)
-    , uTexture        :: UniformLocation GLint
-    , uXOffset        :: UniformLocation GLfloat
-    }
-    deriving Data
+    { uMVP     :: UniformLocation (M44 GLfloat)
+    , uTexture :: UniformLocation GLint
+    , uXOffset :: UniformLocation GLfloat
+    } deriving Data
 
 data Font = Font 
     { fgQuads                 :: GlyphQuads
@@ -94,13 +92,13 @@ glypyQuadsFromText text font glyphQuadProg =
         ) Map.empty text
 
 renderText :: MonadIO m => Font -> String -> M44 GLfloat -> m Float
-renderText Font{..} text model = do
+renderText Font{..} text mvp = do
 
     glBindTexture GL_TEXTURE_2D (unTextureID fgTextureID)
 
     useProgram fgShader
     
-    uniformM44 (uModel fgUniforms) model
+    uniformM44 (uMVP fgUniforms) mvp
 
     uniformI   (uTexture fgUniforms) 0
 
