@@ -26,12 +26,13 @@ resY = 768
 
 -- TODO use some zippers here!
 data AppState = AppState 
-    { _appLines :: String
+    { _appLines :: [String]
+    , _appCurrLine :: String
     }
 makeLenses ''AppState
 
 newAppState :: AppState
-newAppState = AppState { _appLines = mempty }
+newAppState = AppState { _appLines = mempty, _appCurrLine = mempty }
 
 main :: IO ()
 main = do
@@ -60,9 +61,13 @@ mainLoop win events font = do
 
         case e of
             Character char -> 
-                appLines <>= [char]
+                appCurrLine <>= [char]
             _ -> return ()
-        onKeyDown Key'Backspace e $ appLines %= \cs -> if null cs then "" else init cs
+        onKeyDown Key'Backspace e $ appCurrLine %= \cs -> if null cs then "" else init cs
+        onKeyDown Key'Enter e $ do
+            currLine <- use appCurrLine
+            appLines <>= [currLine]
+            appCurrLine .= ""
 
     -- Clear the framebuffer
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
@@ -77,11 +82,11 @@ mainLoop win events font = do
         view44       = lookAt (V3 0 0 500) (V3 0 0 (-4)) (V3 0 1 0)
         model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 xOffset 0 (-4))
 
-    
-
     -- renderCube cube mvp
-    frameChars <- use appLines
-    _ <- liftIO $ renderText font frameChars (projection44 !*! view44 !*! model44)
+    textLines <- use appLines
+    currLine  <- use appCurrLine
+    let allLines = textLines ++ [currLine]
+    _ <- liftIO $ renderText font allLines (projection44 !*! view44 !*! model44)
     
     swapBuffers win
 

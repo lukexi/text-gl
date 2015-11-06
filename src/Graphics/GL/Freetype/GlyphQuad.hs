@@ -26,6 +26,7 @@ data GlyphUniforms = GlyphUniforms
     { uMVP     :: UniformLocation (M44 GLfloat)
     , uTexture :: UniformLocation GLint
     , uXOffset :: UniformLocation GLfloat
+    , uYOffset :: UniformLocation GLfloat
     } deriving Data
 
 data Font = Font 
@@ -35,6 +36,7 @@ data Font = Font
     , fgTextureID             :: TextureID
     , fgUniforms              :: GlyphUniforms
     , fgShader                :: Program
+    , fgPointSize             :: Float
     }
 
 -- Aka ASCII codes 32-126
@@ -67,6 +69,7 @@ makeGlyphsFromChars fontFile pointSize glyphProg characters = do
         , fgTextureID = textureID
         , fgUniforms  = uniforms
         , fgShader    = glyphProg
+        , fgPointSize = pointSize
         }
 
 renderGlyphQuad :: MonadIO m => GlyphQuad -> m ()
@@ -91,33 +94,37 @@ glypyQuadsFromText text font glyphQuadProg =
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: MonadIO m => Font -> String -> M44 GLfloat -> m Float
-renderText Font{..} text mvp = do
+renderText :: MonadIO m => Font -> [String] -> M44 GLfloat -> m ()
+renderText Font{..} lines mvp = do
+
+    let GlyphUniforms{..} = fgUniforms
 
     glBindTexture GL_TEXTURE_2D (unTextureID fgTextureID)
 
     useProgram fgShader
     
-    uniformM44 (uMVP fgUniforms) mvp
+    uniformM44 uMVP     mvp
+    uniformI   uTexture 0
 
-    uniformI   (uTexture fgUniforms) 0
 
-    (xOffset, _) <- foldM (\(lastXOffset, maybeLastChar) thisChar -> do
-        glyph <- liftIO $ FG.getGlyph fgFont thisChar
-        kerning <- case maybeLastChar of
-            Nothing       -> return 0
-            Just lastChar -> liftIO $ FG.getGlyphKerning glyph lastChar
+    forM_ (zip [0..] lines) $ \(lineNum, line) -> do
+        uniformF uYOffset (-lineNum * fgPointSize)
 
-        let glyphQuad   = fgQuads ! thisChar
-            charXOffset = lastXOffset + kerning
-            nextXOffset = charXOffset + FG.gmAdvanceX (glyphMetrics glyphQuad)
+        foldM (\(lastXOffset, maybeLastChar) thisChar -> do
+            glyph <- liftIO $ FG.getGlyph fgFont thisChar
+            kerning <- case maybeLastChar of
+                Nothing       -> return 0
+                Just lastChar -> liftIO $ FG.getGlyphKerning glyph lastChar
 
-        uniformF (uXOffset fgUniforms) charXOffset
-        renderGlyphQuad glyphQuad
+            let glyphQuad   = fgQuads ! thisChar
+                charXOffset = lastXOffset + kerning
+                nextXOffset = charXOffset + FG.gmAdvanceX (glyphMetrics glyphQuad)
 
-        return (nextXOffset, Just thisChar)
-        ) (0, Nothing) text
-    return xOffset
+            uniformF uXOffset charXOffset
+            renderGlyphQuad glyphQuad
+
+            return (nextXOffset, Just thisChar)
+            ) (0, Nothing) line
 
 makeGlyphQuad :: Program -> FG.GlyphMetrics -> IO GlyphQuad
 makeGlyphQuad program metrics@FG.GlyphMetrics{..} = do
