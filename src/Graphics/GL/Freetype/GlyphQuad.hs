@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import Data.Map (Map, (!))
 import System.Random
 import Control.Lens
+import Data.Foldable
 
 data GlyphQuad = GlyphQuad
     { glyphQuadVAO            :: VertexArrayObject
@@ -96,7 +97,8 @@ glypyQuadsFromText text font glyphQuadProg =
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: MonadIO m => Font -> String -> (Int, Int) -> M44 GLfloat -> m ()
+renderText :: (Foldable f, MonadIO m) 
+           => Font -> f Char -> (Int, Int) -> M44 GLfloat -> m ()
 renderText Font{..} string (selStart, selEnd) mvp = do
 
     let GlyphUniforms{..} = fgUniforms
@@ -110,11 +112,11 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     uniformV3  uColor (V3 1 1 1)
     uniformF   uYOffset 0
 
-    let renderChar (lineNum, _, _) (_, '\n') = do
+    let renderChar (charNum, lineNum, _, _) '\n' = do
             let newLineNum = lineNum + 1
             uniformF uYOffset (-newLineNum * fgPointSize)
-            return (newLineNum, 0, Nothing)
-        renderChar (lineNum, lastXOffset, maybeLastChar) (charNum, thisChar) = do
+            return (charNum + 1, newLineNum, 0, Nothing)
+        renderChar (charNum, lineNum, lastXOffset, maybeLastChar) thisChar = do
             if charNum >= selStart && charNum <= selEnd
                 then uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
                 else uniformV4 uBackgroundColor 0
@@ -133,11 +135,11 @@ renderText Font{..} string (selStart, selEnd) mvp = do
             uniformF uXOffset charXOffset
 
             hue <- liftIO randomIO
-            uniformV3 uColor ((hslColor hue 0.9 0.6 1) ^. _xyz)
+            uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
             renderGlyphQuad glyphQuad
 
-            return (lineNum, nextXOffset, Just thisChar)
-    foldM_ renderChar (0, 0, Nothing) (zip [0..] string)
+            return (charNum + 1, lineNum, nextXOffset, Just thisChar)
+    _ <- foldlM renderChar (0, 0, 0, Nothing) string
     return ()
 
 makeGlyphQuad :: Program -> FG.GlyphMetrics -> IO GlyphQuad

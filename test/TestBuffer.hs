@@ -99,7 +99,7 @@ mainLoop win events font = do
             mvp = projection44 !*! view44 !*! model44
 
         buffer <- get
-        renderText font (stringFromBuffer buffer) (bufSelection buffer) mvp
+        renderText font (bufText buffer) (bufSelection buffer) mvp
         
         swapBuffers win
 
