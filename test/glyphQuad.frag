@@ -7,11 +7,15 @@ out vec4 color;
 
 uniform sampler2D uTexture;
 uniform vec3 uColor;
+uniform vec4 uBackgroundColor;
 
 void main() {
 
   float a = texture(uTexture, vTexCoord).r;
   color = vec4(uColor, a);
+  if (a < 0.01) {
+    color = uBackgroundColor;
+  }
   
   // Dump the texture contents to color:
   // color = texture(uTexture, vTexCoord);

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -63,13 +64,17 @@ mainLoop win events font = do
         closeOnEscape win e
 
         superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
-        if superIsDown
-            then 
+        shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
+        if 
+            | superIsDown ->
                 onKeyDown Key'S e $ do
                     liftIO $ putStrLn "Saving..."
                     bufferString <- gets stringFromBuffer
                     liftIO $ writeFile "test/TestBuffer.hs" bufferString
-            else do
+            | shiftIsDown -> do
+                onKeyDown Key'Left e $ selectLeft
+                onKeyDown Key'Right e $ selectRight
+            | otherwise -> do
                 case e of
                     Character char -> insertChar char
                     _ -> return ()
@@ -77,6 +82,9 @@ mainLoop win events font = do
                     backspace
                 onKeyDown Key'Enter e $ do
                     insertChar '\n'
+                onKeyDown Key'Left e $ moveLeft
+                onKeyDown Key'Right e $ moveRight
+                onKeyDown Key'Down e $ moveDown
 
     immutably $ do
         -- Clear the framebuffer
@@ -90,8 +98,8 @@ mainLoop win events font = do
                                 !*! scaleMatrix 0.003
             mvp = projection44 !*! view44 !*! model44
 
-        string <- gets stringFromBuffer
-        renderText font string mvp
+        buffer <- get
+        renderText font (stringFromBuffer buffer) (bufSelection buffer) mvp
         
         swapBuffers win
 

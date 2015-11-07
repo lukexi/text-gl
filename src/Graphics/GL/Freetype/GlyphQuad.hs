@@ -27,7 +27,8 @@ data GlyphUniforms = GlyphUniforms
     , uTexture :: UniformLocation GLint
     , uXOffset :: UniformLocation GLfloat
     , uYOffset :: UniformLocation GLfloat
-    , uColor   :: UniformLocation (V3 GLfloat)
+    , uColor           :: UniformLocation (V3 GLfloat)
+    , uBackgroundColor :: UniformLocation (V4 GLfloat)
     } deriving Data
 
 data Font = Font 
@@ -95,8 +96,8 @@ glypyQuadsFromText text font glyphQuadProg =
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: MonadIO m => Font -> String -> M44 GLfloat -> m ()
-renderText Font{..} text mvp = do
+renderText :: MonadIO m => Font -> String -> (Int, Int) -> M44 GLfloat -> m ()
+renderText Font{..} string (selStart, selEnd) mvp = do
 
     let GlyphUniforms{..} = fgUniforms
 
@@ -107,12 +108,19 @@ renderText Font{..} text mvp = do
     uniformM44 uMVP     mvp
     uniformI   uTexture 0
     uniformV3  uColor (V3 1 1 1)
+    uniformF   uYOffset 0
 
-    let renderChar (_, lineNum, _) '\n' = do
+    let renderChar (lineNum, _, _) (_, '\n') = do
             let newLineNum = lineNum + 1
             uniformF uYOffset (-newLineNum * fgPointSize)
-            return (0, newLineNum, Nothing)
-        renderChar (lastXOffset, lineNum, maybeLastChar) thisChar = do
+            return (newLineNum, 0, Nothing)
+        renderChar (lineNum, lastXOffset, maybeLastChar) (charNum, thisChar) = do
+            if charNum >= selStart && charNum <= selEnd
+                then uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
+                else uniformV4 uBackgroundColor 0
+            -- liftIO $ print (charNum, (selStart, selEnd))
+            -- uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
+
             glyph <- liftIO $ FG.getGlyph fgFont thisChar
             kerning <- case maybeLastChar of
                 Nothing       -> return 0
@@ -128,8 +136,8 @@ renderText Font{..} text mvp = do
             uniformV3 uColor ((hslColor hue 0.9 0.6 1) ^. _xyz)
             renderGlyphQuad glyphQuad
 
-            return (nextXOffset, lineNum, Just thisChar)
-    foldM renderChar (0, 0, Nothing) text
+            return (lineNum, nextXOffset, Just thisChar)
+    foldM_ renderChar (0, 0, Nothing) (zip [0..] string)
     return ()
 
 makeGlyphQuad :: Program -> FG.GlyphMetrics -> IO GlyphQuad

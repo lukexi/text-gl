@@ -11,10 +11,12 @@ import Data.Monoid
 import Control.Monad.State
 import Data.String
 import Data.Foldable
+import Data.Maybe
 
 instance IsString (Seq Char) where
   fromString = Seq.fromList
 
+seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
   where
     left = Seq.take start original
@@ -67,7 +69,7 @@ moveLeft = modify' go
 selectLeft :: MonadState Buffer m => m ()
 selectLeft = modify' go
   where
-    go buffer@(Buffer (0, end) _) = buffer
+    go buffer@(Buffer (0,       _) _) = buffer
     go buffer@(Buffer (start, end) _) = buffer { bufSelection = (start - 1, end) }
 
 moveRight :: MonadState Buffer m => m ()
@@ -82,10 +84,9 @@ moveRight = modify' go
 selectRight :: MonadState Buffer m => m ()
 selectRight = modify' go
   where
-    go buffer@(Buffer (start, end) text)
+    go buffer@(Buffer (_, end) text)
       | end == Seq.length text = buffer
-      | start == end = buffer { bufSelection = (start, end + 1) }
-    go buffer@(Buffer (_, end) _) = buffer { bufSelection = (end + 1, end + 1) }
+    go buffer@(Buffer (start, end) _) = buffer { bufSelection = (start, end + 1) }
 
 backspace :: MonadState Buffer m => m ()
 backspace = do
@@ -101,6 +102,23 @@ moveToEnd = modify' $ \buffer ->
 moveToBeginning :: MonadState Buffer m => m ()
 moveToBeginning = modify' $ \buffer -> 
   buffer { bufSelection = (0, 0) }
+
+-- | FIXME this doesn't correct for the case
+-- where the next line's shorter than the one you're on
+moveDown :: MonadState Buffer m => m ()
+moveDown = modify' $ \buffer -> 
+  let (start, _) = bufSelection buffer
+      (left, right) = Seq.splitAt start (bufText buffer)
+      leftNewline = fromMaybe 0 (Seq.elemIndexR '\n' left)
+      distanceFromLeftNewline = start - leftNewline
+      maybeRightNewline = Seq.elemIndexL '\n' right
+
+  in case maybeRightNewline of
+    Just rightNewline -> 
+      let newCursor = start + rightNewline + distanceFromLeftNewline
+      in buffer { bufSelection = (newCursor, newCursor) }
+    Nothing -> buffer
+
 
 -- main = do
 --   flip runStateT newBuffer $ do
