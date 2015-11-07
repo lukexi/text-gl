@@ -24,7 +24,7 @@ library
   -- other-modules:       
   -- other-extensions:    
   build-depends:       
-    base >=4.8 && <4.9, gl, linear, gl-pal, containers, mtl
+    base >=4.8 && <4.9, gl, linear, gl-pal, containers, mtl, random, lens
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-prof-options:    -Wall -O2 -fprof-auto
@@ -76,4 +76,11 @@ test-suite buffer
     glfw-pal,
     GLFW-b,
     mtl,
-    bytestring, text, linear, time, random, lens, halive
+    bytestring, 
+    text, 
+    linear, 
+    time, 
+    random, 
+    lens-extra, 
+    halive,
+    containers

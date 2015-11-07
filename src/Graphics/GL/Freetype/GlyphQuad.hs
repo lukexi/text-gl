@@ -6,13 +6,13 @@ import qualified Graphics.GL.Freetype.API as FG
 
 import Graphics.GL.Pal
 import Foreign
-import Linear
-import Data.Data
 
 import Control.Monad
 import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
+import System.Random
+import Control.Lens
 
 data GlyphQuad = GlyphQuad
     { glyphQuadVAO            :: VertexArrayObject
@@ -27,6 +27,7 @@ data GlyphUniforms = GlyphUniforms
     , uTexture :: UniformLocation GLint
     , uXOffset :: UniformLocation GLfloat
     , uYOffset :: UniformLocation GLfloat
+    , uColor   :: UniformLocation (V3 GLfloat)
     } deriving Data
 
 data Font = Font 
@@ -95,7 +96,7 @@ glypyQuadsFromText text font glyphQuadProg =
         ) Map.empty text
 
 renderText :: MonadIO m => Font -> [String] -> M44 GLfloat -> m ()
-renderText Font{..} lines mvp = do
+renderText Font{..} textLines mvp = do
 
     let GlyphUniforms{..} = fgUniforms
 
@@ -105,9 +106,9 @@ renderText Font{..} lines mvp = do
     
     uniformM44 uMVP     mvp
     uniformI   uTexture 0
+    uniformV3  uColor (V3 1 1 1)
 
-
-    forM_ (zip [0..] lines) $ \(lineNum, line) -> do
+    forM_ (zip [0..] textLines) $ \(lineNum, line) -> do
         uniformF uYOffset (-lineNum * fgPointSize)
 
         foldM (\(lastXOffset, maybeLastChar) thisChar -> do
@@ -121,6 +122,9 @@ renderText Font{..} lines mvp = do
                 nextXOffset = charXOffset + FG.gmAdvanceX (glyphMetrics glyphQuad)
 
             uniformF uXOffset charXOffset
+
+            hue <- liftIO randomIO
+            uniformV3 uColor ((hslColor hue 0.9 0.6 1) ^. _xyz)
             renderGlyphQuad glyphQuad
 
             return (nextXOffset, Just thisChar)

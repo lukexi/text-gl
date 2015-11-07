@@ -5,4 +5,5 @@ packages:
 - '../linear-extra'
 - '../glfw-pal'
 - '../halive'
+- '../lens-extra'
 resolver: nightly-2015-11-03
