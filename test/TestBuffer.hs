@@ -23,10 +23,12 @@ data AppState = AppState
     }
 makeLenses ''AppState
 
+-- type Buffer = Sequence (Sequence Char)
+
 -- fontFile = "freetype-gl/fonts/Vera.ttf"
 -- fontFile = "freetype-gl/fonts/Lobster-Regular.ttf"
-fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
--- fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
+-- fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
+fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
 
 newAppState :: AppState
 newAppState = AppState { _appLines = mempty, _appCurrLine = mempty }
@@ -60,15 +62,22 @@ mainLoop win events font = do
     processEvents events $ \e -> do
         closeOnEscape win e
 
-        case e of
-            Character char -> 
-                appCurrLine <>= [char]
-            _ -> return ()
-        onKeyDown Key'Backspace e $ appCurrLine %= \cs -> if null cs then "" else init cs
-        onKeyDown Key'Enter e $ do
-            currLine <- use appCurrLine
-            appLines <>= [currLine]
-            appCurrLine .= ""
+        superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
+        if superIsDown
+            then 
+                onKeyDown Key'S e $
+                    liftIO $ putStrLn "Saving..."
+            else do
+                case e of
+                    Character char -> 
+                        appCurrLine <>= [char]
+                    _ -> return ()
+                onKeyDown Key'Backspace e $ 
+                    appCurrLine %= \cs -> if null cs then "" else init cs
+                onKeyDown Key'Enter e $ do
+                    currLine <- use appCurrLine
+                    appLines <>= [currLine]
+                    appCurrLine .= ""
 
     immutably $ do
         -- Clear the framebuffer
