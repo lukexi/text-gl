@@ -11,27 +11,26 @@ import Control.Lens.Extra
 import Control.Monad
 import Control.Monad.State
 import Halive.Utils
-import qualified Data.Sequence as Seq
+
+import TextBuffer
 
 resX, resY :: Num a => a
 resX = 1024
 resY = 768
 
-data AppState = AppState 
-    { _appLines :: [String]
-    , _appCurrLine :: String
-    }
-makeLenses ''AppState
+-- data AppState = AppState 
+--     { _appTextBuffer :: Buffer
+--     }
+-- makeLenses ''AppState
+-- newAppState :: AppState
+-- newAppState = AppState { _appLines = mempty }
 
--- type Buffer = Sequence (Sequence Char)
-
+fontFile :: FilePath
 -- fontFile = "freetype-gl/fonts/Vera.ttf"
 -- fontFile = "freetype-gl/fonts/Lobster-Regular.ttf"
 -- fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
 fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
 
-newAppState :: AppState
-newAppState = AppState { _appLines = mempty, _appCurrLine = mempty }
 
 main :: IO ()
 main = do
@@ -46,12 +45,13 @@ main = do
     glDisable GL_DEPTH_TEST
 
     text <- readFile "test/TestBuffer.hs"
-    let initialState = newAppState { _appLines = lines text }
+    -- let initialState = newAppState { _appTextBuffer = bufferFromString text }
+    let initialState = bufferFromString text
     void . flip runStateT initialState . whileWindow win $ 
         mainLoop win events font 
 
 
-mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> Font -> m ()
+mainLoop :: (MonadState Buffer m, MonadIO m) => Window -> Events -> Font -> m ()
 mainLoop win events font = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
@@ -65,19 +65,18 @@ mainLoop win events font = do
         superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
         if superIsDown
             then 
-                onKeyDown Key'S e $
+                onKeyDown Key'S e $ do
                     liftIO $ putStrLn "Saving..."
+                    bufferString <- gets stringFromBuffer
+                    liftIO $ writeFile "test/TestBuffer.hs" bufferString
             else do
                 case e of
-                    Character char -> 
-                        appCurrLine <>= [char]
+                    Character char -> insertChar char
                     _ -> return ()
                 onKeyDown Key'Backspace e $ 
-                    appCurrLine %= \cs -> if null cs then "" else init cs
+                    backspace
                 onKeyDown Key'Enter e $ do
-                    currLine <- use appCurrLine
-                    appLines <>= [currLine]
-                    appCurrLine .= ""
+                    insertChar '\n'
 
     immutably $ do
         -- Clear the framebuffer
@@ -85,19 +84,14 @@ mainLoop win events font = do
         glEnable GL_BLEND
         glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-        let xOffset = (-0)
-            -- (-xOffset/2)
-
         -- Render our scene
         let view44       = viewMatrixFromPose newPose
             model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-2) (2) (-4))
                                 !*! scaleMatrix 0.003
+            mvp = projection44 !*! view44 !*! model44
 
-        -- renderCube cube mvp
-        textLines <- use appLines
-        currLine  <- use appCurrLine
-        let allLines = textLines ++ [currLine]
-        _ <- liftIO $ renderText font allLines (projection44 !*! view44 !*! model44)
+        string <- gets stringFromBuffer
+        renderText font string mvp
         
         swapBuffers win
 

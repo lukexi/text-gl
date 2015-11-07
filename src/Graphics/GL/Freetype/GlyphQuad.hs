@@ -95,8 +95,8 @@ glypyQuadsFromText text font glyphQuadProg =
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
-renderText :: MonadIO m => Font -> [String] -> M44 GLfloat -> m ()
-renderText Font{..} textLines mvp = do
+renderText :: MonadIO m => Font -> String -> M44 GLfloat -> m ()
+renderText Font{..} text mvp = do
 
     let GlyphUniforms{..} = fgUniforms
 
@@ -108,10 +108,11 @@ renderText Font{..} textLines mvp = do
     uniformI   uTexture 0
     uniformV3  uColor (V3 1 1 1)
 
-    forM_ (zip [0..] textLines) $ \(lineNum, line) -> do
-        uniformF uYOffset (-lineNum * fgPointSize)
-
-        foldM (\(lastXOffset, maybeLastChar) thisChar -> do
+    let renderChar (_, lineNum, _) '\n' = do
+            let newLineNum = lineNum + 1
+            uniformF uYOffset (-newLineNum * fgPointSize)
+            return (0, newLineNum, Nothing)
+        renderChar (lastXOffset, lineNum, maybeLastChar) thisChar = do
             glyph <- liftIO $ FG.getGlyph fgFont thisChar
             kerning <- case maybeLastChar of
                 Nothing       -> return 0
@@ -127,8 +128,9 @@ renderText Font{..} textLines mvp = do
             uniformV3 uColor ((hslColor hue 0.9 0.6 1) ^. _xyz)
             renderGlyphQuad glyphQuad
 
-            return (nextXOffset, Just thisChar)
-            ) (0, Nothing) line
+            return (nextXOffset, lineNum, Just thisChar)
+    foldM renderChar (0, 0, Nothing) text
+    return ()
 
 makeGlyphQuad :: Program -> FG.GlyphMetrics -> IO GlyphQuad
 makeGlyphQuad program metrics@FG.GlyphMetrics{..} = do

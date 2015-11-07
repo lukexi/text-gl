@@ -10,6 +10,7 @@ import Data.Sequence (Seq)
 import Data.Monoid
 import Control.Monad.State
 import Data.String
+import Data.Foldable
 
 instance IsString (Seq Char) where
   fromString = Seq.fromList
@@ -27,8 +28,17 @@ data Buffer = Buffer
 newBuffer :: Buffer
 newBuffer = Buffer 
   { bufSelection = (0,0)
-  , bufText = mempty
+  , bufText = ""
   }
+
+bufferFromString :: String -> Buffer
+bufferFromString string = Buffer
+  { bufSelection = (0,0)
+  , bufText = fromString string
+  }
+
+stringFromBuffer :: Buffer -> String
+stringFromBuffer = toList . bufText
 
 insertBuffer :: Seq Char -> Buffer -> Buffer
 insertBuffer chars (Buffer (start, end) text) = 
@@ -36,6 +46,12 @@ insertBuffer chars (Buffer (start, end) text) =
   where 
     newText = seqReplace (start, end) chars text
     newCursor = (start + Seq.length chars)
+
+insertChar :: MonadState Buffer m => Char -> m ()
+insertChar char = insertString [char]
+
+insertString :: MonadState Buffer m => String -> m ()
+insertString string = insert (fromString string)
 
 insert :: MonadState Buffer m => Seq Char -> m ()
 insert chars = modify' (insertBuffer chars)
@@ -86,16 +102,16 @@ moveToBeginning :: MonadState Buffer m => m ()
 moveToBeginning = modify' $ \buffer -> 
   buffer { bufSelection = (0, 0) }
 
-main = do
-  flip runStateT newBuffer $ do
-    insert "hello"
-    insert " there"
-    insert "\n"
-    moveLeft
-    moveLeft
-    insert "mr."
-    insert "magpie"
-    selectLeft
-    selectLeft
-    insert ""
-    liftIO . print =<< get
+-- main = do
+--   flip runStateT newBuffer $ do
+--     insert "hello"
+--     insert " there"
+--     insert "\n"
+--     moveLeft
+--     moveLeft
+--     insert "mr."
+--     insert "magpie"
+--     selectLeft
+--     selectLeft
+--     insert ""
+--     liftIO . print =<< get
