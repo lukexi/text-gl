@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Graphics.GL.Freetype.GlyphQuad where
 
-import qualified Graphics.GL.Freetype.API as FG
+import Graphics.GL.Freetype.API
 
 import Graphics.GL.Pal
 import Foreign
@@ -18,28 +18,26 @@ import Data.Foldable
 data GlyphQuad = GlyphQuad
     { glyphQuadVAO            :: VertexArrayObject
     , glyphQuadIndexCount     :: GLsizei
-    , glyphMetrics            :: FG.GlyphMetrics
+    , glyphMetrics            :: GlyphMetrics
     }
 
-type GlyphQuads = Map Char GlyphQuad
-
 data GlyphUniforms = GlyphUniforms
-    { uMVP     :: UniformLocation (M44 GLfloat)
-    , uTexture :: UniformLocation GLint
-    , uXOffset :: UniformLocation GLfloat
-    , uYOffset :: UniformLocation GLfloat
+    { uMVP             :: UniformLocation (M44 GLfloat)
+    , uTexture         :: UniformLocation GLint
+    , uXOffset         :: UniformLocation GLfloat
+    , uYOffset         :: UniformLocation GLfloat
     , uColor           :: UniformLocation (V3 GLfloat)
     , uBackgroundColor :: UniformLocation (V4 GLfloat)
     } deriving Data
 
 data Font = Font 
-    { fgQuads                 :: GlyphQuads
-    , fgFont                  :: FG.Font
-    , fgAtlas                 :: FG.TextureAtlas
-    , fgTextureID             :: TextureID
-    , fgUniforms              :: GlyphUniforms
-    , fgShader                :: Program
-    , fgPointSize             :: Float
+    { fgQuads          :: Map Char GlyphQuad
+    , fgFont           :: FontPtr
+    , fgAtlas          :: TextureAtlas
+    , fgTextureID      :: TextureID
+    , fgUniforms       :: GlyphUniforms
+    , fgShader         :: Program
+    , fgPointSize      :: Float
     }
 
 -- Aka ASCII codes 32-126
@@ -52,16 +50,17 @@ makeGlyphs fontFile pointSize glyphProg = makeGlyphsFromChars fontFile pointSize
 makeGlyphsFromChars :: String -> Float -> Program -> String -> IO Font
 makeGlyphsFromChars fontFile pointSize glyphProg characters = do
     -- Create an atlas to hold the characters
-    atlas <- FG.newTextureAtlas 1024 1024 FG.BitDepth1
+    atlas  <- newTextureAtlas 1024 1024 BitDepth1
     -- Create a font and associate it with the atlas
-    font  <- FG.newFontFromFile atlas pointSize fontFile
+    font   <- newFontFromFile atlas pointSize fontFile
     -- Load the characters into the atlas
-    missed <- FG.loadFontGlyphs font characters
-    putStrLn $ "Missed: " ++ show missed
+    missed <- loadFontGlyphs font characters
+    when (missed > 0) $
+        putStrLn ("Tried to load too many characters! Missed: " ++ show missed)
     -- Cache the quads that will render each character
-    quads <- glypyQuadsFromText characters font glyphProg
+    quads  <- glyphQuadsFromText characters font glyphProg
 
-    let textureID = TextureID (FG.atlasTextureID atlas)
+    let textureID = TextureID (atlasTextureID atlas)
 
     uniforms <- acquireUniforms glyphProg
 
@@ -88,11 +87,11 @@ renderGlyphQuad glyphQuad = do
 -- Make GlyphQuad
 ----------------------------------------------------------
 
-glypyQuadsFromText :: String -> FG.Font -> Program -> IO GlyphQuads
-glypyQuadsFromText text font glyphQuadProg = 
+glyphQuadsFromText :: String -> FontPtr -> Program -> IO (Map Char GlyphQuad)
+glyphQuadsFromText text font glyphQuadProg = 
     foldM (\quads character -> do
-        glyph        <- FG.getGlyph font character
-        glyphMetrics <- FG.getGlyphMetrics glyph
+        glyph        <- getGlyph font character
+        glyphMetrics <- getGlyphMetrics glyph
         glyphQuad    <- makeGlyphQuad glyphQuadProg glyphMetrics
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
@@ -120,20 +119,19 @@ renderText Font{..} string (selStart, selEnd) mvp = do
             if charNum >= selStart && charNum <= selEnd
                 then uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
                 else uniformV4 uBackgroundColor 0
-            -- liftIO $ print (charNum, (selStart, selEnd))
-            -- uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
 
-            glyph <- liftIO $ FG.getGlyph fgFont thisChar
-            kerning <- case maybeLastChar of
-                Nothing       -> return 0
-                Just lastChar -> liftIO $ FG.getGlyphKerning glyph lastChar
+            -- Acquire the glyph for this character to measure its kerning
+            glyph   <- getGlyph fgFont thisChar
+            kerning <- maybe (return 0) (getGlyphKerning glyph) maybeLastChar
 
             let glyphQuad   = fgQuads ! thisChar
                 charXOffset = lastXOffset + kerning
-                nextXOffset = charXOffset + FG.gmAdvanceX (glyphMetrics glyphQuad)
+                nextXOffset = charXOffset + gmAdvanceX (glyphMetrics glyphQuad)
 
+            -- Adjust the character's x offset to nestle against the previous character
             uniformF uXOffset charXOffset
 
+            -- Randomize the color
             hue <- liftIO randomIO
             uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
             renderGlyphQuad glyphQuad
@@ -142,8 +140,8 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     _ <- foldlM renderChar (0, 0, 0, Nothing) string
     return ()
 
-makeGlyphQuad :: Program -> FG.GlyphMetrics -> IO GlyphQuad
-makeGlyphQuad program metrics@FG.GlyphMetrics{..} = do
+makeGlyphQuad :: Program -> GlyphMetrics -> IO GlyphQuad
+makeGlyphQuad program metrics@GlyphMetrics{..} = do
     let x0  = gmOffsetX
         y0  = gmOffsetY
         x1  = x0 + gmWidth

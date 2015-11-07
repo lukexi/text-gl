@@ -3,9 +3,10 @@
 module Graphics.GL.Freetype.API where
 import Foreign
 import Foreign.C
+import Control.Monad.Trans
 
 newtype TextureAtlas = TextureAtlas (Ptr TextureAtlas)
-newtype Font         = Font         (Ptr Font)
+newtype FontPtr      = FontPtr      (Ptr FontPtr)
 newtype Glyph        = Glyph        (Ptr Glyph)
 
 data BitDepth = BitDepth1 -- Regular 'alpha-channel-only' atlas
@@ -32,9 +33,9 @@ atlasTextureID :: Num a => TextureAtlas -> a
 atlasTextureID = fromIntegral . get_atlas_texture_id
 
 foreign import ccall "texture_font_new_from_file"
-    texture_font_new_from_file :: TextureAtlas -> CFloat -> Ptr CChar -> IO Font
+    texture_font_new_from_file :: TextureAtlas -> CFloat -> Ptr CChar -> IO FontPtr
 
-newFontFromFile :: TextureAtlas -> Float -> String -> IO Font
+newFontFromFile :: TextureAtlas -> Float -> String -> IO FontPtr
 newFontFromFile textureAtlas pointSize fileName = 
     withCString fileName $ \fileNamePtr ->
         texture_font_new_from_file 
@@ -43,18 +44,18 @@ newFontFromFile textureAtlas pointSize fileName =
             fileNamePtr
 
 foreign import ccall "texture_font_load_glyphs"
-    texture_font_load_glyphs :: Font -> Ptr CWchar -> IO CSize
+    texture_font_load_glyphs :: FontPtr -> Ptr CWchar -> IO CSize
 
-loadFontGlyphs :: Font -> String -> IO CSize
+loadFontGlyphs :: FontPtr -> String -> IO CSize
 loadFontGlyphs font glyphs =
     withCWString glyphs $ \glyphsPtr ->
         texture_font_load_glyphs font glyphsPtr
 
 foreign import ccall "texture_font_get_glyph"
-    texture_font_get_glyph :: Font -> CWchar -> IO Glyph
+    texture_font_get_glyph :: FontPtr -> CWchar -> IO Glyph
 
-getGlyph :: Font -> Char -> IO Glyph
-getGlyph font char = 
+getGlyph :: MonadIO m => FontPtr -> Char -> m Glyph
+getGlyph font char = liftIO $
     withCWString [char] $ \charPtr -> do
         cwchar <- peek charPtr
         texture_font_get_glyph font cwchar
@@ -65,8 +66,8 @@ foreign import ccall "texture_glyph_get_kerning"
 -- | Gets the kerning between two glyphs — e.g if rendering "Hi", 
 -- pass the glyph for i along with 'H',
 -- and add the returned offset to i's position
-getGlyphKerning :: Glyph -> Char -> IO Float
-getGlyphKerning glyph char = 
+getGlyphKerning :: MonadIO m => Glyph -> Char -> m Float
+getGlyphKerning glyph char = liftIO $ 
     withCWString [char] $ \charPtr -> do
         cwchar <- peek charPtr
         realToFrac <$> texture_glyph_get_kerning glyph cwchar
@@ -75,14 +76,14 @@ foreign import ccall "get_glyph_metrics"
     get_glyph_metrics :: Glyph -> IO (Ptr CFloat)
 
 data GlyphMetrics = GlyphMetrics
-    { gmOffsetX :: Float
-    , gmOffsetY :: Float
-    , gmWidth :: Float
-    , gmHeight :: Float
-    , gmS0 :: Float
-    , gmT0 :: Float
-    , gmS1 :: Float
-    , gmT1 :: Float
+    { gmOffsetX  :: Float
+    , gmOffsetY  :: Float
+    , gmWidth    :: Float
+    , gmHeight   :: Float
+    , gmS0       :: Float
+    , gmT0       :: Float
+    , gmS1       :: Float
+    , gmT1       :: Float
     , gmAdvanceX :: Float
     } deriving Show
 
