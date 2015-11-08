@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE MultiWayIf #-}
 module Graphics.GL.Freetype.GlyphQuad where
 
 import Graphics.GL.Freetype.API
@@ -26,8 +27,8 @@ data GlyphUniforms = GlyphUniforms
     , uTexture         :: UniformLocation GLint
     , uXOffset         :: UniformLocation GLfloat
     , uYOffset         :: UniformLocation GLfloat
+    , uZOffset         :: UniformLocation GLfloat
     , uColor           :: UniformLocation (V3 GLfloat)
-    , uBackgroundColor :: UniformLocation (V4 GLfloat)
     } deriving Data
 
 data Font = Font 
@@ -42,7 +43,13 @@ data Font = Font
 
 -- Aka ASCII codes 32-126
 asciiChars :: String
-asciiChars = [' '..'~']
+asciiChars = cursorChar:blockChar:[' '..'~']
+
+blockChar :: Char
+blockChar = '█'
+
+cursorChar :: Char
+cursorChar = '▏'
 
 makeGlyphs :: String -> Float -> Program -> IO Font
 makeGlyphs fontFile pointSize glyphProg = makeGlyphsFromChars fontFile pointSize glyphProg asciiChars
@@ -111,32 +118,49 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     uniformV3  uColor (V3 1 1 1)
     uniformF   uYOffset 0
 
-    let renderChar (charNum, lineNum, _, _) '\n' = do
-            let newLineNum = lineNum + 1
-            uniformF uYOffset (-newLineNum * fgPointSize)
-            return (charNum + 1, newLineNum, 0, Nothing)
-        renderChar (charNum, lineNum, lastXOffset, maybeLastChar) thisChar = do
-            if charNum >= selStart && charNum <= selEnd
-                then uniformV4 uBackgroundColor (V4 0.1 0.5 0.8 1)
-                else uniformV4 uBackgroundColor 0
+    let blockQuad  = fgQuads ! blockChar
+        cursorQuad = fgQuads ! cursorChar
+
+    let renderChar (charNum, lineNum, lastXOffset, maybeLastChar) thisChar = do
+            -- Render newlines as spaces
+            let thisChar' = if thisChar == '\n' then ' ' else thisChar
 
             -- Acquire the glyph for this character to measure its kerning
-            glyph   <- getGlyph fgFont thisChar
+            glyph   <- getGlyph fgFont thisChar'
             kerning <- maybe (return 0) (getGlyphKerning glyph) maybeLastChar
 
-            let glyphQuad   = fgQuads ! thisChar
+            let glyphQuad   = fgQuads ! thisChar'
                 charXOffset = lastXOffset + kerning
                 nextXOffset = charXOffset + gmAdvanceX (glyphMetrics glyphQuad)
 
             -- Adjust the character's x offset to nestle against the previous character
             uniformF uXOffset charXOffset
+            uniformF uYOffset (-lineNum * fgPointSize)
 
+            
+
+            -- Render the selection character
+            if 
+                | charNum == selStart && charNum == selEnd -> do
+                    -- uniformF   uZOffset (-0.01)
+                    uniformV3  uColor (V3 1 1 1)
+                    renderGlyphQuad cursorQuad
+                | charNum >= selStart && charNum < selEnd -> do
+                    -- uniformF   uZOffset (-1)
+                    uniformV3  uColor (V3 0.3 0.3 0.4)
+                    renderGlyphQuad blockQuad
+                | otherwise -> return ()
+            uniformF   uZOffset 0
             -- Randomize the color
             hue <- liftIO randomIO
             uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
+
+            
             renderGlyphQuad glyphQuad
 
-            return (charNum + 1, lineNum, nextXOffset, Just thisChar)
+            return $ if thisChar == '\n'
+                then (charNum + 1, lineNum + 1,       0, Nothing)
+                else (charNum + 1, lineNum, nextXOffset, Just thisChar)
     _ <- foldlM renderChar (0, 0, 0, Nothing) string
     return ()
 
