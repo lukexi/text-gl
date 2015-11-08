@@ -5,7 +5,6 @@ uniform mat4 uModel;
 
 uniform float uXOffset;
 uniform float uYOffset;
-uniform float uZOffset;
 
 in vec3 aVertex;
 in vec3 aNormal;
@@ -16,7 +15,7 @@ out vec2 vTexCoord;
 
 void main() { 
 
-    vec4 finalVertex = vec4(aVertex.x + uXOffset, aVertex.y + uYOffset, aVertex.z + uZOffset, 1.0);
+    vec4 finalVertex = vec4(aVertex.x + uXOffset, aVertex.y + uYOffset, aVertex.z, 1.0);
     gl_Position = uMVP * finalVertex;
 
     vNormal   = aNormal;

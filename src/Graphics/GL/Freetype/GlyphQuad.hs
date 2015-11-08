@@ -17,9 +17,10 @@ import Control.Lens
 import Data.Foldable
 
 data GlyphQuad = GlyphQuad
-    { glyphQuadVAO            :: VertexArrayObject
-    , glyphQuadIndexCount     :: GLsizei
-    , glyphMetrics            :: GlyphMetrics
+    { gqVAO            :: VertexArrayObject
+    , gqIndexCount     :: GLsizei
+    , gqMetrics        :: GlyphMetrics
+    , gqGlyph          :: Glyph
     }
 
 data GlyphUniforms = GlyphUniforms
@@ -27,7 +28,6 @@ data GlyphUniforms = GlyphUniforms
     , uTexture         :: UniformLocation GLint
     , uXOffset         :: UniformLocation GLfloat
     , uYOffset         :: UniformLocation GLfloat
-    , uZOffset         :: UniformLocation GLfloat
     , uColor           :: UniformLocation (V3 GLfloat)
     } deriving Data
 
@@ -84,9 +84,9 @@ makeGlyphsFromChars fontFile pointSize glyphProg characters = do
 renderGlyphQuad :: MonadIO m => GlyphQuad -> m ()
 renderGlyphQuad glyphQuad = do
 
-    glBindVertexArray (unVertexArrayObject (glyphQuadVAO glyphQuad))
+    glBindVertexArray (unVertexArrayObject (gqVAO glyphQuad))
 
-    glDrawElements GL_TRIANGLES (glyphQuadIndexCount glyphQuad) GL_UNSIGNED_INT nullPtr
+    glDrawElements GL_TRIANGLES (gqIndexCount glyphQuad) GL_UNSIGNED_INT nullPtr
 
     glBindVertexArray 0
 
@@ -98,8 +98,8 @@ glyphQuadsFromText :: String -> FontPtr -> Program -> IO (Map Char GlyphQuad)
 glyphQuadsFromText text font glyphQuadProg = 
     foldM (\quads character -> do
         glyph        <- getGlyph font character
-        glyphMetrics <- getGlyphMetrics glyph
-        glyphQuad    <- makeGlyphQuad glyphQuadProg glyphMetrics
+        gqMetrics    <- getGlyphMetrics glyph
+        glyphQuad    <- makeGlyphQuad glyphQuadProg glyph gqMetrics
         return $ Map.insert character glyphQuad quads
         ) Map.empty text
 
@@ -124,37 +124,30 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     let renderChar (charNum, lineNum, lastXOffset, maybeLastChar) thisChar = do
             -- Render newlines as spaces
             let thisChar' = if thisChar == '\n' then ' ' else thisChar
+                glyphQuad = fgQuads ! thisChar'
 
-            -- Acquire the glyph for this character to measure its kerning
-            glyph   <- getGlyph fgFont thisChar'
-            kerning <- maybe (return 0) (getGlyphKerning glyph) maybeLastChar
+            -- Find the optimal kerning between this character and the last one rendered (if any)
+            kerning <- maybe (return 0) (getGlyphKerning (gqGlyph glyphQuad)) maybeLastChar
 
-            let glyphQuad   = fgQuads ! thisChar'
-                charXOffset = lastXOffset + kerning
-                nextXOffset = charXOffset + gmAdvanceX (glyphMetrics glyphQuad)
+            let charXOffset = lastXOffset + kerning
+                nextXOffset = charXOffset + gmAdvanceX (gqMetrics glyphQuad)
 
             -- Adjust the character's x offset to nestle against the previous character
             uniformF uXOffset charXOffset
             uniformF uYOffset (-lineNum * fgPointSize)
 
-            
-
-            -- Render the selection character
-            if 
-                | charNum == selStart && charNum == selEnd -> do
-                    -- uniformF   uZOffset (-0.01)
+            -- Render the selection and cursor characters
+            if  | charNum == selStart && charNum == selEnd -> do
                     uniformV3  uColor (V3 1 1 1)
                     renderGlyphQuad cursorQuad
                 | charNum >= selStart && charNum < selEnd -> do
-                    -- uniformF   uZOffset (-1)
                     uniformV3  uColor (V3 0.3 0.3 0.4)
                     renderGlyphQuad blockQuad
                 | otherwise -> return ()
-            uniformF   uZOffset 0
+
             -- Randomize the color
             hue <- liftIO randomIO
             uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
-
             
             renderGlyphQuad glyphQuad
 
@@ -164,8 +157,8 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     _ <- foldlM renderChar (0, 0, 0, Nothing) string
     return ()
 
-makeGlyphQuad :: Program -> GlyphMetrics -> IO GlyphQuad
-makeGlyphQuad program metrics@GlyphMetrics{..} = do
+makeGlyphQuad :: Program -> Glyph -> GlyphMetrics -> IO GlyphQuad
+makeGlyphQuad program glyph metrics@GlyphMetrics{..} = do
     let x0  = gmOffsetX
         y0  = gmOffsetY
         x1  = x0 + gmWidth
@@ -306,9 +299,10 @@ makeGlyphQuad program metrics@GlyphMetrics{..} = do
 
     
     return GlyphQuad 
-        { glyphQuadVAO              = VertexArrayObject vaoGlyphQuad
-        , glyphQuadIndexCount       = fromIntegral (length glyphQuadIndices)
-        , glyphMetrics              = metrics
+        { gqVAO        = VertexArrayObject vaoGlyphQuad
+        , gqIndexCount = fromIntegral (length glyphQuadIndices)
+        , gqMetrics    = metrics
+        , gqGlyph      = glyph
         }
 
 
