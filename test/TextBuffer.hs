@@ -124,6 +124,22 @@ moveDown = modify' $ \buffer ->
             newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
         in buffer { bufSelection = (newCursor, newCursor) }
 
+
+moveUp :: MonadState Buffer m => m ()
+moveUp = modify' $ \buffer ->
+  let (cursorLocation, _)     = bufSelection buffer
+      lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
+  -- If there's no newline beyond the cursor, do nothing
+  in case findIndex (>= cursorLocation) lineLocations of
+      Nothing -> buffer
+      Just nextLineIndex -> 
+        let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
+            prevLineLocation        = lineLocations !! (nextLineIndex - 2)
+            currentDistanceFromLeft = cursorLocation - currentLineLocation
+            -- Don't jump futher than the prev newline location
+            newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
+        in buffer { bufSelection = (newCursor, newCursor) }
+
 -- main = do
 --   flip runStateT newBuffer $ do
 --     insert "hello"

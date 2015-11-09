@@ -85,6 +85,7 @@ mainLoop win events font = do
                 onKeyDown Key'Left e $ moveLeft
                 onKeyDown Key'Right e $ moveRight
                 onKeyDown Key'Down e $ moveDown
+                onKeyDown Key'Up e $ moveUp
 
     immutably $ do
         -- Clear the framebuffer
