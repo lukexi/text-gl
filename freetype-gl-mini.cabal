@@ -52,15 +52,13 @@ test-suite basic
   type:                exitcode-stdio-1.0
   default-language:    Haskell2010
   ghc-options:         -O2 -Wall -threaded -rtsopts
-  other-modules: SetupGLFW
   build-depends:
     base,
     freetype-gl-mini,
     gl,
     gl-pal,
-    GLFW-b,
     mtl,
-    bytestring, text, linear, time, random
+    bytestring, text, linear, time, random, glfw-pal
 
 test-suite buffer
   main-is:             TestBuffer.hs
@@ -75,7 +73,6 @@ test-suite buffer
     gl,
     gl-pal,
     glfw-pal,
-    GLFW-b,
     mtl,
     bytestring, 
     text, 
