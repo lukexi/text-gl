@@ -12,6 +12,9 @@ import Control.Monad.State
 import Data.String
 import Data.Foldable
 import Data.Maybe
+import Data.List (findIndex)
+import Debug.Trace
+import Text.Printf
 
 instance IsString (Seq Char) where
   fromString = Seq.fromList
@@ -103,22 +106,23 @@ moveToBeginning :: MonadState Buffer m => m ()
 moveToBeginning = modify' $ \buffer -> 
   buffer { bufSelection = (0, 0) }
 
--- | FIXME this doesn't correct for the case
--- where the next line's shorter than the one you're on
 moveDown :: MonadState Buffer m => m ()
-moveDown = modify' $ \buffer -> 
-  let (start, _) = bufSelection buffer
-      (left, right) = Seq.splitAt start (bufText buffer)
-      leftNewline = fromMaybe 0 (Seq.elemIndexR '\n' left)
-      distanceFromLeftNewline = start - leftNewline
-      maybeRightNewline = Seq.elemIndexL '\n' right
-
-  in case maybeRightNewline of
-    Just rightNewline -> 
-      let newCursor = start + rightNewline + distanceFromLeftNewline
-      in buffer { bufSelection = (newCursor, newCursor) }
-    Nothing -> buffer
-
+moveDown = modify' $ \buffer ->
+  let (cursorLocation, _)     = bufSelection buffer
+      -- Add an artificial "newline" at -1 to represent the beginning of the document
+      lineLocations           = (-1):Seq.elemIndicesL '\n' (bufText buffer)
+  -- If there's no newline beyond the cursor, do nothing
+  in case findIndex (>= cursorLocation) lineLocations of
+      Nothing -> buffer
+      Just nextLineIndex -> 
+        -- Thanks to the (-1) fake newline, we can always count on nextLineIndex begin at least 1
+        let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
+            nextLineLocation        = lineLocations !! nextLineIndex
+            nextNextLineLocation    = lineLocations !! (nextLineIndex + 1)
+            currentDistanceFromLeft = cursorLocation - currentLineLocation
+            -- Don't jump futher than the next newline location
+            newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
+        in buffer { bufSelection = (newCursor, newCursor) }
 
 -- main = do
 --   flip runStateT newBuffer $ do
