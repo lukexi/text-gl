@@ -146,8 +146,8 @@ renderText Font{..} string (selStart, selEnd) mvp = do
                 | otherwise -> return ()
 
             -- Randomize the color
-            hue <- liftIO randomIO
-            uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
+            -- hue <- liftIO randomIO
+            -- uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
             
             renderGlyphQuad glyphQuad
 

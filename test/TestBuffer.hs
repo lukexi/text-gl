@@ -23,10 +23,10 @@ import TextBuffer
 -- newAppState = AppState { _appLines = mempty }
 
 fontFile :: FilePath
--- fontFile = "freetype-gl/fonts/Vera.ttf"
+fontFile = "freetype-gl/fonts/Vera.ttf"
 -- fontFile = "freetype-gl/fonts/Lobster-Regular.ttf"
 -- fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
-fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
+-- fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
 
 
 main :: IO ()
@@ -37,7 +37,7 @@ main = do
     glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     font          <- makeGlyphs fontFile 30 glyphQuadProg
 
-    glClearColor 0 0.1 0.1 1
+    glClearColor 1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
     glDisable GL_DEPTH_TEST
 
@@ -66,23 +66,23 @@ mainLoop win events font = do
         shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
         if 
             | superIsDown ->
-                onKeyDown Key'S e $ do
+                onKeyDown e Key'S $ do
                     liftIO $ putStrLn "Saving..."
                     bufferString <- gets stringFromBuffer
                     liftIO $ writeFile "test/TestBuffer.hs" bufferString
             | shiftIsDown -> do
-                onKeyDown Key'Left  e $ selectLeft
-                onKeyDown Key'Right e $ selectRight
+                onKeyDown e Key'Left  $ selectLeft
+                onKeyDown e Key'Right $ selectRight
             | otherwise -> do
                 case e of
                     Character char -> insertChar char
                     _ -> return ()
-                onKeyDown Key'Backspace e $ backspace
-                onKeyDown Key'Enter     e $ insertChar '\n'
-                onKeyDown Key'Left      e $ moveLeft
-                onKeyDown Key'Right     e $ moveRight
-                onKeyDown Key'Down      e $ moveDown
-                onKeyDown Key'Up        e $ moveUp
+                onKeyDown e Key'Backspace $ backspace
+                onKeyDown e Key'Enter     $ insertChar '\n'
+                onKeyDown e Key'Left      $ moveLeft
+                onKeyDown e Key'Right     $ moveRight
+                onKeyDown e Key'Down      $ moveDown
+                onKeyDown e Key'Up        $ moveUp
 
     immutably $ do
         -- Clear the framebuffer
