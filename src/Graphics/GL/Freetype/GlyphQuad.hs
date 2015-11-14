@@ -164,145 +164,73 @@ makeGlyphQuad program glyph metrics@GlyphMetrics{..} = do
         x1  = x0 + gmWidth
         y1  = y0 - gmHeight
 
-    
-    -- Setup a VAO
-    vaoGlyphQuad <- overPtr (glGenVertexArrays 1)
+    vao <- newVAO
+    withVAO vao $ do
+        ----------------------
+        -- GlyphQuad Positions
+        ----------------------
+        let positions = 
+                --- front
+                [ x0 , y0 , 0.0  
+                , x0 , y1 , 0.0  
+                , x1 , y1 , 0.0  
+                , x1 , y0 , 0.0 ] :: [GLfloat]
 
-    glBindVertexArray vaoGlyphQuad
+        positionsBuffer <- bufferData GL_STATIC_DRAW positions
+        withArrayBuffer positionsBuffer $ assignAttribute program "aVertex" 3
 
+        --------------------
+        -- GlyphQuad Normals
+        --------------------
+        let normals = 
+                --- front
+                [ 0.0, 0.0, 1.0  
+                , 0.0, 0.0, 1.0  
+                , 0.0, 0.0, 1.0  
+                , 0.0, 0.0, 1.0 ] :: [GLfloat]
 
-    ----------------------
-    -- GlyphQuad Positions
-    ----------------------
-    aVertex   <- getShaderAttribute program "aVertex"
-    -- Buffer the glyphQuad vertices
-    let glyphQuadVertices = 
-            --- front
-            [ x0 , y0 , 0.0  
-            , x0 , y1 , 0.0  
-            , x1 , y1 , 0.0  
-            , x1 , y0 , 0.0 ] :: [GLfloat]
+        normalsBuffer <- bufferData GL_STATIC_DRAW normals
+        withArrayBuffer normalsBuffer $ assignAttribute program "aNormal" 3
 
-    vaoGlyphQuadVertices <- overPtr (glGenBuffers 1)
+        --------------------------------
+        -- GlyphQuad Texture Coordinates
+        --------------------------------
+        -- Buffer the glyphQuad ids
+        let texCoords = 
+                [ gmS0, gmT0
+                , gmS0, gmT1
+                , gmS1, gmT1
+                , gmS1, gmT0 ] :: [GLfloat]
+        -- To visualize the whole atlas:
+        -- let glyphQuadTexCoords = 
+        --         [ 0,0
+        --         , 0,1
+        --         , 1,1
+        --         , 1,0 ] :: [GLfloat]
+        -- print glyphQuadTexCoords
 
-    glBindBuffer GL_ARRAY_BUFFER vaoGlyphQuadVertices
+        textCoordsBuffer <- bufferData GL_STATIC_DRAW texCoords
+        withArrayBuffer textCoordsBuffer $ assignAttribute program "aTexCoord" 2
 
-    let glyphQuadVerticesSize = fromIntegral (sizeOf (undefined :: GLfloat) * length glyphQuadVertices)
+        ---------------------
+        -- GlyphQuad Indicies
+        ---------------------
 
-    withArray glyphQuadVertices $ 
-        \glyphQuadVerticesPtr ->
-            glBufferData GL_ARRAY_BUFFER glyphQuadVerticesSize (castPtr glyphQuadVerticesPtr) GL_STATIC_DRAW 
+        -- Buffer the glyphQuad indices
+        let indices = 
+                -- front
+                [ 0, 1, 2
+                , 0, 2, 3 ] :: [GLuint]
 
-    -- Describe our vertices array to OpenGL
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aVertex))
+        indicesBuffer <- bufferElementData indices
 
-    glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aVertex)) -- attribute
-        3                 -- number of elements per vertex, here (x,y,z)
-        GL_FLOAT          -- the type of each element
-        GL_FALSE          -- don't normalize
-        0                 -- no extra data between each position
-        nullPtr           -- offset of first element
-
-    ----------------------
-    -- GlyphQuad Normals
-    ----------------------
-    aNormal   <- getShaderAttribute program "aNormal"
-    -- Buffer the glyphQuad normals
-    let glyphQuadNormals = 
-            --- front
-            [ 0.0, 0.0, 1.0  
-            , 0.0, 0.0, 1.0  
-            , 0.0, 0.0, 1.0  
-            , 0.0, 0.0, 1.0 ] :: [GLfloat]
-
-    vaoGlyphQuadNormals <- overPtr (glGenBuffers 1)
-
-    glBindBuffer GL_ARRAY_BUFFER vaoGlyphQuadNormals
-
-    let glyphQuadNormalsSize = fromIntegral (sizeOf (undefined :: GLfloat) * length glyphQuadNormals)
-
-    withArray glyphQuadNormals $ 
-        \glyphQuadNormalsPtr ->
-            glBufferData GL_ARRAY_BUFFER glyphQuadNormalsSize (castPtr glyphQuadNormalsPtr) GL_STATIC_DRAW 
-
-    -- Describe our normals array to OpenGL
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aNormal))
-
-    glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aNormal)) -- attribute
-        3                 -- number of elements per vertex, here (x,y,z)
-        GL_FLOAT          -- the type of each element
-        GL_FALSE          -- don't normalize
-        0                 -- no extra data between each position
-        nullPtr           -- offset of first element
-
-    --------------------------------
-    -- GlyphQuad Texture Coordinates
-    --------------------------------
-    aTexCoord <- getShaderAttribute program "aTexCoord"
-    -- Buffer the glyphQuad ids
-    let glyphQuadTexCoords = 
-            [ gmS0, gmT0
-            , gmS0, gmT1
-            , gmS1, gmT1
-            , gmS1, gmT0 ] :: [GLfloat]
-    -- To visualize the whole atlas:
-    -- let glyphQuadTexCoords = 
-    --         [ 0,0
-    --         , 0,1
-    --         , 1,1
-    --         , 1,0 ] :: [GLfloat]
-    -- print glyphQuadTexCoords
-    vboGlyphQuadTexCoords <- overPtr (glGenBuffers 1)
-
-    glBindBuffer GL_ARRAY_BUFFER vboGlyphQuadTexCoords
-
-    let glyphQuadTexCoordsSize = fromIntegral (sizeOf (undefined :: GLfloat) * length glyphQuadTexCoords)
-
-    withArray glyphQuadTexCoords $
-        \glyphQuadTexCoordsPtr ->
-            glBufferData GL_ARRAY_BUFFER glyphQuadTexCoordsSize (castPtr glyphQuadTexCoordsPtr) GL_STATIC_DRAW
-
-    
-    glEnableVertexAttribArray (fromIntegral (unAttributeLocation aTexCoord))
-
-    glVertexAttribPointer
-        (fromIntegral (unAttributeLocation aTexCoord)) -- attribute
-        2                 -- number of elements per vertex, here (u,v)
-        GL_FLOAT          -- the type of each element
-        GL_FALSE          -- don't normalize
-        0                 -- no extra data between each position
-        nullPtr           -- offset of first element
-
-    ---------------------
-    -- GlyphQuad Indicies
-    ---------------------
-
-    -- Buffer the glyphQuad indices
-    let glyphQuadIndices = 
-            -- front
-            [ 0, 1, 2
-            , 0, 2, 3 ] :: [GLuint]
-    
-    iboGlyphQuadElements <- overPtr (glGenBuffers 1)
-    
-    glBindBuffer GL_ELEMENT_ARRAY_BUFFER iboGlyphQuadElements
-
-    let glyphQuadElementsSize = fromIntegral (sizeOf (undefined :: GLuint) * length glyphQuadIndices)
-    
-    withArray glyphQuadIndices $ 
-        \glyphQuadIndicesPtr ->
-            glBufferData GL_ELEMENT_ARRAY_BUFFER glyphQuadElementsSize (castPtr glyphQuadIndicesPtr) GL_STATIC_DRAW
-    
-    glBindVertexArray 0
-
-    
-    return GlyphQuad 
-        { gqVAO        = VertexArrayObject vaoGlyphQuad
-        , gqIndexCount = fromIntegral (length glyphQuadIndices)
-        , gqMetrics    = metrics
-        , gqGlyph      = glyph
-        }
+        bindElementArrayBuffer indicesBuffer
+        
+        return GlyphQuad 
+            { gqVAO        = vao
+            , gqIndexCount = fromIntegral (length indices)
+            , gqMetrics    = metrics
+            , gqGlyph      = glyph
+            }
 
 
