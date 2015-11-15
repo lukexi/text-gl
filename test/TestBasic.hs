@@ -1,10 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
-import Graphics.GL.Freetype
+-- import Graphics.GL.Freetype
+import GlyphQuadNew
 
 import Control.Monad
-import System.Random
+-- import System.Random
+import Halive.Utils
 
 -------------------------------------------------------------
 -- A test to make sure font rendering works
@@ -13,22 +15,23 @@ import System.Random
 main :: IO a
 main = do
 
-    (win, events) <- createWindow "Freetype-GL" 1024 768
+    (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    font          <- makeGlyphs "freetype-gl/fonts/Vera.ttf" 50 glyphQuadProg
+    glyphQuadProg <- createShaderProgram "test/glyphQuadUBO.vert" "test/glyphQuadUBO.frag"
+    font          <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphQuadProg
 
     glClearColor 0 0.1 0.1 1
     -- glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-
+    glGetErrors
     forever $ 
         mainLoop win events font 
 
 
 mainLoop :: Window -> Events -> Font -> IO ()
 mainLoop win events font = do
+    glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
     processEvents events $ closeOnEscape win
 
@@ -47,7 +50,8 @@ mainLoop win events font = do
         mvp          = projection44 !*! view44 !*! model44
 
     -- Render random characters
-    frameChars <- replicateM 10 $ randomRIO (' ','~')
+    -- frameChars <- replicateM 10 $ randomRIO (' ','~')
+    let frameChars = asciiChars ++ ['\n'] ++ asciiChars
     renderText font frameChars (-1,3) mvp
     
     swapBuffers win

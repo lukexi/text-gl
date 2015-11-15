@@ -6,21 +6,20 @@ module Graphics.GL.Freetype.GlyphQuad where
 import Graphics.GL.Freetype.API
 
 import Graphics.GL.Pal
-import Foreign
 
 import Control.Monad
 import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
-import System.Random
-import Control.Lens
+-- import System.Random
+-- import Control.Lens
 import Data.Foldable
 
 data GlyphQuad = GlyphQuad
     { gqVAO            :: VertexArrayObject
     , gqIndexCount     :: GLsizei
     , gqMetrics        :: GlyphMetrics
-    , gqGlyph          :: Glyph
+    , gqGlyph          :: GlyphPtr
     }
 
 data GlyphUniforms = GlyphUniforms
@@ -51,11 +50,11 @@ blockChar = '█'
 cursorChar :: Char
 cursorChar = '▏'
 
-makeGlyphs :: String -> Float -> Program -> IO Font
-makeGlyphs fontFile pointSize glyphProg = makeGlyphsFromChars fontFile pointSize glyphProg asciiChars
+createFont :: String -> Float -> Program -> IO Font
+createFont fontFile pointSize glyphProg = createFontWithChars fontFile pointSize glyphProg asciiChars
 
-makeGlyphsFromChars :: String -> Float -> Program -> String -> IO Font
-makeGlyphsFromChars fontFile pointSize glyphProg characters = do
+createFontWithChars :: String -> Float -> Program -> String -> IO Font
+createFontWithChars fontFile pointSize glyphProg characters = do
     -- Create an atlas to hold the characters
     atlas  <- newTextureAtlas 1024 1024 BitDepth1
     -- Create a font and associate it with the atlas
@@ -64,10 +63,11 @@ makeGlyphsFromChars fontFile pointSize glyphProg characters = do
     missed <- loadFontGlyphs font characters
     when (missed > 0) $
         putStrLn ("Tried to load too many characters! Missed: " ++ show missed)
+    
+    let textureID = TextureID (atlasTextureID atlas)
+    
     -- Cache the quads that will render each character
     quads  <- glyphQuadsFromText characters font glyphProg
-
-    let textureID = TextureID (atlasTextureID atlas)
 
     uniforms <- acquireUniforms glyphProg
 
@@ -157,7 +157,7 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     _ <- foldlM renderChar (0, 0, 0, Nothing) string
     return ()
 
-makeGlyphQuad :: Program -> Glyph -> GlyphMetrics -> IO GlyphQuad
+makeGlyphQuad :: Program -> GlyphPtr -> GlyphMetrics -> IO GlyphQuad
 makeGlyphQuad program glyph metrics@GlyphMetrics{..} = do
     let x0  = gmOffsetX
         y0  = gmOffsetY
@@ -166,57 +166,27 @@ makeGlyphQuad program glyph metrics@GlyphMetrics{..} = do
 
     vao <- newVAO
     withVAO vao $ do
-        ----------------------
-        -- GlyphQuad Positions
-        ----------------------
+        -- Quad positions
         let positions = 
-                --- front
-                [ x0 , y0 , 0.0  
-                , x0 , y1 , 0.0  
-                , x1 , y1 , 0.0  
-                , x1 , y0 , 0.0 ] :: [GLfloat]
+                [ x0 , y0  
+                , x0 , y1  
+                , x1 , y1  
+                , x1 , y0 ]
 
         positionsBuffer <- bufferData GL_STATIC_DRAW positions
-        withArrayBuffer positionsBuffer $ assignAttribute program "aVertex" 3
+        withArrayBuffer positionsBuffer $ assignFloatAttribute program "aPosition" GL_FLOAT 2
 
-        --------------------
-        -- GlyphQuad Normals
-        --------------------
-        let normals = 
-                --- front
-                [ 0.0, 0.0, 1.0  
-                , 0.0, 0.0, 1.0  
-                , 0.0, 0.0, 1.0  
-                , 0.0, 0.0, 1.0 ] :: [GLfloat]
-
-        normalsBuffer <- bufferData GL_STATIC_DRAW normals
-        withArrayBuffer normalsBuffer $ assignAttribute program "aNormal" 3
-
-        --------------------------------
-        -- GlyphQuad Texture Coordinates
-        --------------------------------
-        -- Buffer the glyphQuad ids
+        -- Texture coordinates
         let texCoords = 
                 [ gmS0, gmT0
                 , gmS0, gmT1
                 , gmS1, gmT1
-                , gmS1, gmT0 ] :: [GLfloat]
-        -- To visualize the whole atlas:
-        -- let glyphQuadTexCoords = 
-        --         [ 0,0
-        --         , 0,1
-        --         , 1,1
-        --         , 1,0 ] :: [GLfloat]
-        -- print glyphQuadTexCoords
+                , gmS1, gmT0 ]
 
         textCoordsBuffer <- bufferData GL_STATIC_DRAW texCoords
-        withArrayBuffer textCoordsBuffer $ assignAttribute program "aTexCoord" 2
+        withArrayBuffer textCoordsBuffer $ assignFloatAttribute program "aTexCoord" GL_FLOAT 2
 
-        ---------------------
-        -- GlyphQuad Indicies
-        ---------------------
-
-        -- Buffer the glyphQuad indices
+        -- Indices
         let indices = 
                 -- front
                 [ 0, 1, 2

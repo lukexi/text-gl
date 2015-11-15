@@ -1,23 +1,18 @@
 #version 330 core
 
 uniform mat4 uMVP;
-uniform mat4 uModel;
 
 uniform float uXOffset;
 uniform float uYOffset;
 
-in vec3 aVertex;
-in vec3 aNormal;
+in vec2 aPosition;
 in vec2 aTexCoord;
 
-out vec3 vNormal;
 out vec2 vTexCoord;
 
 void main() { 
 
-    vec4 finalVertex = vec4(aVertex.x + uXOffset, aVertex.y + uYOffset, aVertex.z, 1.0);
-    gl_Position = uMVP * finalVertex;
+    gl_Position = uMVP * vec4(aPosition.x + uXOffset, aPosition.y + uYOffset, 0.0, 1.0);
 
-    vNormal   = aNormal;
     vTexCoord = aTexCoord;
 }

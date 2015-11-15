@@ -7,7 +7,7 @@ import Control.Monad.Trans
 
 newtype TextureAtlas = TextureAtlas (Ptr TextureAtlas)
 newtype FontPtr      = FontPtr      (Ptr FontPtr)
-newtype Glyph        = Glyph        (Ptr Glyph)
+newtype GlyphPtr     = GlyphPtr     (Ptr GlyphPtr)
 
 data BitDepth = BitDepth1 -- Regular 'alpha-channel-only' atlas
               | BitDepth3 -- Subpixel RGB atlas
@@ -52,28 +52,28 @@ loadFontGlyphs font glyphs =
         texture_font_load_glyphs font glyphsPtr
 
 foreign import ccall "texture_font_get_glyph"
-    texture_font_get_glyph :: FontPtr -> CWchar -> IO Glyph
+    texture_font_get_glyph :: FontPtr -> CWchar -> IO GlyphPtr
 
-getGlyph :: MonadIO m => FontPtr -> Char -> m Glyph
+getGlyph :: MonadIO m => FontPtr -> Char -> m GlyphPtr
 getGlyph font char = liftIO $
     withCWString [char] $ \charPtr -> do
         cwchar <- peek charPtr
         texture_font_get_glyph font cwchar
 
 foreign import ccall "texture_glyph_get_kerning"
-    texture_glyph_get_kerning :: Glyph -> CWchar -> IO CFloat
+    texture_glyph_get_kerning :: GlyphPtr -> CWchar -> IO CFloat
 
 -- | Gets the kerning between two glyphs — e.g if rendering "Hi", 
 -- pass the glyph for i along with 'H',
 -- and add the returned offset to i's position
-getGlyphKerning :: MonadIO m => Glyph -> Char -> m Float
+getGlyphKerning :: MonadIO m => GlyphPtr -> Char -> m Float
 getGlyphKerning glyph char = liftIO $ 
     withCWString [char] $ \charPtr -> do
         cwchar <- peek charPtr
         realToFrac <$> texture_glyph_get_kerning glyph cwchar
 
 foreign import ccall "get_glyph_metrics"
-    get_glyph_metrics :: Glyph -> IO (Ptr CFloat)
+    get_glyph_metrics :: GlyphPtr -> IO (Ptr CFloat)
 
 data GlyphMetrics = GlyphMetrics
     { gmOffsetX  :: Float
@@ -87,7 +87,7 @@ data GlyphMetrics = GlyphMetrics
     , gmAdvanceX :: Float
     } deriving Show
 
-getGlyphMetrics :: Glyph -> IO GlyphMetrics
+getGlyphMetrics :: GlyphPtr -> IO GlyphMetrics
 getGlyphMetrics glyph = do
     glyphMetricsPtr <- get_glyph_metrics glyph
     [offsetX, offsetY, width, height, s0, t0, s1, t1, advanceX] <- fmap realToFrac <$> peekArray 9 glyphMetricsPtr

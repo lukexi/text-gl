@@ -34,8 +34,8 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    font          <- makeGlyphs fontFile 30 glyphQuadProg
+    glyphQuadProg <- createShaderProgram "test/glyphQuadUBO.vert" "test/glyphQuadUBO.frag"
+    font          <- createFont fontFile 30 glyphQuadProg
 
     glClearColor 1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
