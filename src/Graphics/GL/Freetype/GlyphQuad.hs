@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE ViewPatterns #-}
 module Graphics.GL.Freetype.GlyphQuad where
 
 import Graphics.GL.Freetype.API
@@ -11,34 +12,33 @@ import Control.Monad
 import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
--- import System.Random
--- import Control.Lens
 import Data.Foldable
-
-data GlyphQuad = GlyphQuad
-    { gqVAO            :: VertexArrayObject
-    , gqIndexCount     :: GLsizei
-    , gqMetrics        :: GlyphMetrics
-    , gqGlyph          :: GlyphPtr
-    }
+import Foreign
 
 data GlyphUniforms = GlyphUniforms
     { uMVP             :: UniformLocation (M44 GLfloat)
     , uTexture         :: UniformLocation GLint
-    , uXOffset         :: UniformLocation GLfloat
-    , uYOffset         :: UniformLocation GLfloat
     , uColor           :: UniformLocation (V3 GLfloat)
     } deriving Data
 
 data Font = Font 
-    { fgQuads          :: Map Char GlyphQuad
-    , fgFont           :: FontPtr
-    , fgAtlas          :: TextureAtlas
-    , fgTextureID      :: TextureID
-    , fgUniforms       :: GlyphUniforms
-    , fgShader         :: Program
-    , fgPointSize      :: Float
+    { fntFontPtr       :: FontPtr
+    , fntAtlas         :: TextureAtlas
+    , fntTextureID     :: TextureID
+    , fntUniforms      :: GlyphUniforms
+    , fntShader        :: Program
+    , fntPointSize     :: Float
+    , fntGlyphsByChar  :: Map Char Glyph
+    , fntVAO           :: VertexArrayObject
+    , fntIndexBuffer   :: ArrayBuffer
+    , fntOffsetBuffer  :: ArrayBuffer
     }
+
+data Glyph = Glyph
+  { glyIndex    :: GLint
+  , glyGlyphPtr :: GlyphPtr
+  , glyMetrics  :: GlyphMetrics
+  }
 
 -- Aka ASCII codes 32-126
 asciiChars :: String
@@ -51,10 +51,10 @@ cursorChar :: Char
 cursorChar = '▏'
 
 createFont :: String -> Float -> Program -> IO Font
-createFont fontFile pointSize glyphProg = createFontWithChars fontFile pointSize glyphProg asciiChars
+createFont fontFile pointSize shader = createFontWithChars fontFile pointSize shader asciiChars
 
 createFontWithChars :: String -> Float -> Program -> String -> IO Font
-createFontWithChars fontFile pointSize glyphProg characters = do
+createFontWithChars fontFile pointSize shader characters = do
     -- Create an atlas to hold the characters
     atlas  <- newTextureAtlas 1024 1024 BitDepth1
     -- Create a font and associate it with the atlas
@@ -62,145 +62,129 @@ createFontWithChars fontFile pointSize glyphProg characters = do
     -- Load the characters into the atlas
     missed <- loadFontGlyphs font characters
     when (missed > 0) $
-        putStrLn ("Tried to load too many characters! Missed: " ++ show missed)
+      putStrLn ("Tried to load too many characters! Missed: " ++ show missed)
     
     let textureID = TextureID (atlasTextureID atlas)
+
     
-    -- Cache the quads that will render each character
-    quads  <- glyphQuadsFromText characters font glyphProg
+    (characterMetrics, glyphsByChar) <- foldM (\(allCharacterMetrics, glyphsByChar) (character, i) -> do
 
-    uniforms <- acquireUniforms glyphProg
+      glyphPtr                 <- getGlyph font character
+      metrics@GlyphMetrics{..} <- getGlyphMetrics glyphPtr
 
-    return Font 
-        { fgQuads     = quads
-        , fgFont      = font
-        , fgAtlas     = atlas 
-        , fgTextureID = textureID
-        , fgUniforms  = uniforms
-        , fgShader    = glyphProg
-        , fgPointSize = pointSize
+      let x0  = gmOffsetX
+          y0  = gmOffsetY
+          x1  = gmOffsetX + gmWidth
+          y1  = gmOffsetY - gmHeight
+
+          charPositions = concatMap toList
+                    [ V4 x0 y1 gmS0 gmT1
+                    , V4 x0 y0 gmS0 gmT0  
+                    , V4 x1 y1 gmS1 gmT1  
+                    , V4 x1 y0 gmS1 gmT0 ] :: [GLfloat]
+
+          charMetricsStructureFlattened = charPositions
+
+          glyph = Glyph { glyIndex = i, glyGlyphPtr = glyphPtr, glyMetrics = metrics }
+          newAllCharacterMetrics = allCharacterMetrics ++ charMetricsStructureFlattened
+          newGlyphsByChar        = Map.insert character glyph glyphsByChar
+      -- print character
+      -- print (charPositions)
+      return (newAllCharacterMetrics, newGlyphsByChar)
+      ) mempty (zip characters [0..])
+
+    charMetricsBuffer <- bufferUniformData GL_STATIC_DRAW characterMetrics
+
+    -- Set up our UBO globally
+    let charMetricsBindingPoint = UniformBlockBindingPoint 0
+    bindUniformBufferBase charMetricsBuffer charMetricsBindingPoint
+
+    -- Bind the shader's uniform buffer declaration to the correct uniform buffer object
+    bindShaderUniformBuffer shader "charactersBlock" charMetricsBindingPoint
+
+    glyphVAO <- newVAO
+
+    -- Reserve space for 10000 characters
+    glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..10000] :: [GLint])
+    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (concatMap toList (replicate 10000 (0::V2 GLfloat)))
+
+    withVAO glyphVAO $ do
+      withArrayBuffer glyphIndexBuffer $ do
+        let name = "aInstanceGlyphIndex"
+        attribute <- getShaderAttribute shader name
+        assignIntegerAttribute shader name GL_INT 1
+        vertexAttribDivisor attribute 1
+      withArrayBuffer glyphOffsetBuffer $ do
+        let name = "aInstanceCharacterOffset"
+        attribute <- getShaderAttribute shader name
+        assignFloatAttribute shader name GL_FLOAT 2
+        vertexAttribDivisor attribute 1
+
+    uniforms <- acquireUniforms shader
+
+    return Font
+        { fntFontPtr            = font
+        , fntAtlas              = atlas
+        , fntTextureID          = textureID
+        , fntUniforms           = uniforms
+        , fntShader             = shader
+        , fntPointSize          = pointSize
+        , fntVAO                = glyphVAO
+        , fntIndexBuffer        = glyphIndexBuffer
+        , fntOffsetBuffer       = glyphOffsetBuffer
+        , fntGlyphsByChar       = glyphsByChar
         }
 
-renderGlyphQuad :: MonadIO m => GlyphQuad -> m ()
-renderGlyphQuad glyphQuad = do
-
-    glBindVertexArray (unVertexArrayObject (gqVAO glyphQuad))
-
-    glDrawElements GL_TRIANGLES (gqIndexCount glyphQuad) GL_UNSIGNED_INT nullPtr
-
-    glBindVertexArray 0
-
-----------------------------------------------------------
--- Make GlyphQuad
-----------------------------------------------------------
-
-glyphQuadsFromText :: String -> FontPtr -> Program -> IO (Map Char GlyphQuad)
-glyphQuadsFromText text font glyphQuadProg = 
-    foldM (\quads character -> do
-        glyph        <- getGlyph font character
-        gqMetrics    <- getGlyphMetrics glyph
-        glyphQuad    <- makeGlyphQuad glyphQuadProg glyph gqMetrics
-        return $ Map.insert character glyphQuad quads
-        ) Map.empty text
 
 renderText :: (Foldable f, MonadIO m) 
            => Font -> f Char -> (Int, Int) -> M44 GLfloat -> m ()
 renderText Font{..} string (selStart, selEnd) mvp = do
+    useProgram fntShader
+    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
-    let GlyphUniforms{..} = fgUniforms
+    let GlyphUniforms{..} = fntUniforms
 
-    glBindTexture GL_TEXTURE_2D (unTextureID fgTextureID)
-
-    useProgram fgShader
-    
     uniformM44 uMVP     mvp
     uniformI   uTexture 0
     uniformV3  uColor (V3 1 1 1)
-    uniformF   uYOffset 0
 
-    let blockQuad  = fgQuads ! blockChar
-        cursorQuad = fgQuads ! cursorChar
+    let blockGlyph  = fntGlyphsByChar ! blockChar
+        cursorGlyph = fntGlyphsByChar ! cursorChar
+        renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indexesF, offsetsF) character = do
+          -- Render newlines as spaces
+          let glyph      = fntGlyphsByChar ! (if character == '\n' then ' ' else character)
 
-    let renderChar (charNum, lineNum, lastXOffset, maybeLastChar) thisChar = do
-            -- Render newlines as spaces
-            let thisChar' = if thisChar == '\n' then ' ' else thisChar
-                glyphQuad = fgQuads ! thisChar'
+          -- Find the optimal kerning between this character and the last one rendered (if any)
+          kerning <- maybe (return 0) (getGlyphKerning (glyGlyphPtr glyph)) maybeLastChar
 
-            -- Find the optimal kerning between this character and the last one rendered (if any)
-            kerning <- maybe (return 0) (getGlyphKerning (gqGlyph glyphQuad)) maybeLastChar
+          -- Adjust the character's x offset to nestle against the previous character
+          let charXOffset = lastXOffset + kerning
+              nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
+              charOffset = V2 charXOffset (-lineNum * fntPointSize)
+              (indexes, offsets) 
+                | charNum == selStart && charNum == selEnd =
+                  let indexes = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
+                      offsets = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes, offsets)
+                | charNum >= selStart && charNum < selEnd = 
+                  let indexes = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
+                      offsets = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes, offsets)
+                | otherwise =
+                  let indexes = glyIndex glyph : indexesF :: [GLint]
+                      offsets = charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes, offsets)
+          
+          return $ if character == '\n'
+              then (charNum + 1, lineNum + 1,           0, Nothing       , indexes, offsets)
+              else (charNum + 1, lineNum    , nextXOffset, Just character, indexes, offsets)
+    (_, _, _, _, indexes, offsets) <- foldlM renderChar (0, 0, 0, Nothing, [], []) string
+    -- liftIO$print (reverse indexes)
+    bufferSubData fntIndexBuffer  (reverse indexes)
+    bufferSubData fntOffsetBuffer (concatMap toList $ reverse offsets)
 
-            let charXOffset = lastXOffset + kerning
-                nextXOffset = charXOffset + gmAdvanceX (gqMetrics glyphQuad)
-
-            -- Adjust the character's x offset to nestle against the previous character
-            uniformF uXOffset charXOffset
-            uniformF uYOffset (-lineNum * fgPointSize)
-
-            -- Render the selection and cursor characters
-            if  | charNum == selStart && charNum == selEnd -> do
-                    uniformV3  uColor (V3 1 1 1)
-                    renderGlyphQuad cursorQuad
-                | charNum >= selStart && charNum < selEnd -> do
-                    uniformV3  uColor (V3 0.3 0.3 0.4)
-                    renderGlyphQuad blockQuad
-                | otherwise -> return ()
-
-            -- Randomize the color
-            -- hue <- liftIO randomIO
-            -- uniformV3 uColor ((hslColor hue 0.9 0.9 1) ^. _xyz)
-            
-            renderGlyphQuad glyphQuad
-
-            return $ if thisChar == '\n'
-                then (charNum + 1, lineNum + 1,       0, Nothing)
-                else (charNum + 1, lineNum, nextXOffset, Just thisChar)
-    _ <- foldlM renderChar (0, 0, 0, Nothing) string
+    let numVertices  = 4
+        numInstances = fromIntegral (length string)
+    withVAO fntVAO $ 
+      glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
-
-makeGlyphQuad :: Program -> GlyphPtr -> GlyphMetrics -> IO GlyphQuad
-makeGlyphQuad program glyph metrics@GlyphMetrics{..} = do
-    let x0  = gmOffsetX
-        y0  = gmOffsetY
-        x1  = x0 + gmWidth
-        y1  = y0 - gmHeight
-
-    vao <- newVAO
-    withVAO vao $ do
-        -- Quad positions
-        let positions = 
-                [ x0 , y0  
-                , x0 , y1  
-                , x1 , y1  
-                , x1 , y0 ]
-
-        positionsBuffer <- bufferData GL_STATIC_DRAW positions
-        withArrayBuffer positionsBuffer $ assignFloatAttribute program "aPosition" GL_FLOAT 2
-
-        -- Texture coordinates
-        let texCoords = 
-                [ gmS0, gmT0
-                , gmS0, gmT1
-                , gmS1, gmT1
-                , gmS1, gmT0 ]
-
-        textCoordsBuffer <- bufferData GL_STATIC_DRAW texCoords
-        withArrayBuffer textCoordsBuffer $ assignFloatAttribute program "aTexCoord" GL_FLOAT 2
-
-        -- Indices
-        let indices = 
-                -- front
-                [ 0, 1, 2
-                , 0, 2, 3 ] :: [GLuint]
-
-        indicesBuffer <- bufferElementData indices
-
-        bindElementArrayBuffer indicesBuffer
-        
-        return GlyphQuad 
-            { gqVAO        = vao
-            , gqIndexCount = fromIntegral (length indices)
-            , gqMetrics    = metrics
-            , gqGlyph      = glyph
-            }
-
-

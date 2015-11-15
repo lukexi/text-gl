@@ -1,8 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
--- import Graphics.GL.Freetype
-import GlyphQuadNew
+import Graphics.GL.Freetype
 
 import Control.Monad
 -- import System.Random
