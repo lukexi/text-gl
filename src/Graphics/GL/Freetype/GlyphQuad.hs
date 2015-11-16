@@ -13,7 +13,6 @@ import Control.Monad.Trans
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
 import Data.Foldable
-import Foreign
 
 data GlyphUniforms = GlyphUniforms
     { uMVP             :: UniformLocation (M44 GLfloat)
@@ -144,9 +143,9 @@ renderText Font{..} string (selStart, selEnd) mvp = do
 
     let GlyphUniforms{..} = fntUniforms
 
-    uniformM44 uMVP     mvp
+    uniformM44 uMVP     (mvp !*! scaleMatrix 0.005)
     uniformI   uTexture 0
-    uniformV3  uColor (V3 1 1 1)
+    uniformV3  uColor   (V3 1 1 1)
 
     let blockGlyph  = fntGlyphsByChar ! blockChar
         cursorGlyph = fntGlyphsByChar ! cursorChar
@@ -163,17 +162,17 @@ renderText Font{..} string (selStart, selEnd) mvp = do
               charOffset = V2 charXOffset (-lineNum * fntPointSize)
               (indexes, offsets) 
                 | charNum == selStart && charNum == selEnd =
-                  let indexes = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
-                      offsets = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes, offsets)
+                  let indexes' = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
+                      offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes', offsets')
                 | charNum >= selStart && charNum < selEnd = 
-                  let indexes = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
-                      offsets = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes, offsets)
+                  let indexes' = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
+                      offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes', offsets')
                 | otherwise =
-                  let indexes = glyIndex glyph : indexesF :: [GLint]
-                      offsets = charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes, offsets)
+                  let indexes' = glyIndex glyph : indexesF :: [GLint]
+                      offsets' = charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indexes', offsets')
           
           return $ if character == '\n'
               then (charNum + 1, lineNum + 1,           0, Nothing       , indexes, offsets)

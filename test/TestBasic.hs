@@ -16,7 +16,7 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuadUBO.vert" "test/glyphQuadUBO.frag"
+    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     font          <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphQuadProg
 
     glClearColor 0 0.1 0.1 1
@@ -44,7 +44,6 @@ mainLoop win events font = do
 
     -- Create our model view projection matrix
     let model44      = mkTransformation 1 (V3 (-1) 0 (-4))
-                        !*! scaleMatrix 0.005
         view44       = lookAt (V3 0 2 0) (V3 0 0 (-4)) (V3 0 1 0)
         mvp          = projection44 !*! view44 !*! model44
 

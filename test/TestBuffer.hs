@@ -34,7 +34,7 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuadUBO.vert" "test/glyphQuadUBO.frag"
+    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
     font          <- createFont fontFile 30 glyphQuadProg
 
     glClearColor 1 0.1 0.1 1
@@ -91,7 +91,6 @@ mainLoop win events font = do
         -- Render our scene
         let view44       = viewMatrixFromPose newPose
             model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-2) (2) (-4))
-                                !*! scaleMatrix 0.003
             mvp          = projection44 !*! view44 !*! model44
 
         buffer <- get

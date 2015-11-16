@@ -11,10 +11,7 @@ import Data.Monoid
 import Control.Monad.State
 import Data.String
 import Data.Foldable
-import Data.Maybe
 import Data.List (findIndex)
-import Debug.Trace
-import Text.Printf
 
 instance IsString (Seq Char) where
   fromString = Seq.fromList
