@@ -50,6 +50,8 @@ mainLoop win events font = do
     -- Render random characters
     -- frameChars <- replicateM 10 $ randomRIO (' ','~')
     let frameChars = asciiChars ++ ['\n'] ++ asciiChars
+        textBuffer = textBufferFromString font "" frameChars
+    updateIndicesAndOffsets textBuffer
     renderText font frameChars (-1,3) mvp
     
     swapBuffers win

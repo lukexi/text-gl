@@ -5,9 +5,9 @@ import Foreign
 import Foreign.C
 import Control.Monad.Trans
 
-newtype TextureAtlas = TextureAtlas (Ptr TextureAtlas)
-newtype FontPtr      = FontPtr      (Ptr FontPtr)
-newtype GlyphPtr     = GlyphPtr     (Ptr GlyphPtr)
+newtype TextureAtlas = TextureAtlas (Ptr TextureAtlas) deriving Show
+newtype FontPtr      = FontPtr      (Ptr FontPtr)      deriving Show
+newtype GlyphPtr     = GlyphPtr     (Ptr GlyphPtr)     deriving Show
 
 data BitDepth = BitDepth1 -- Regular 'alpha-channel-only' atlas
               | BitDepth3 -- Subpixel RGB atlas

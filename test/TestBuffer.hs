@@ -79,6 +79,8 @@ mainLoop win events font = do
                 onKeyDown e Key'Right     $ id %= moveRight
                 onKeyDown e Key'Down      $ id %= moveDown
                 onKeyDown e Key'Up        $ id %= moveUp
+        
+        updateIndicesAndOffsets =<< use id
 
     immutably $ do
         -- Clear the framebuffer

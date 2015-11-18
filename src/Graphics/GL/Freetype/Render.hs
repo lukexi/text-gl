@@ -16,15 +16,7 @@ import Data.Foldable
 
 import Graphics.GL.Freetype.Types
 
--- Aka ASCII codes 32-126
-asciiChars :: String
-asciiChars = cursorChar:blockChar:[' '..'~']
 
-blockChar :: Char
-blockChar = '█'
-
-cursorChar :: Char
-cursorChar = '▏'
 
 createFont :: String -> Float -> Program -> IO Font
 createFont fontFile pointSize shader = createFontWithChars fontFile pointSize shader asciiChars
@@ -99,17 +91,17 @@ createFontWithChars fontFile pointSize shader characters = do
     uniforms <- acquireUniforms shader
 
     return Font
-        { fntFontPtr            = font
-        , fntAtlas              = atlas
-        , fntTextureID          = textureID
-        , fntUniforms           = uniforms
-        , fntShader             = shader
-        , fntPointSize          = pointSize
-        , fntVAO                = glyphVAO
-        , fntIndexBuffer        = glyphIndexBuffer
-        , fntOffsetBuffer       = glyphOffsetBuffer
-        , fntGlyphsByChar       = glyphsByChar
-        }
+      { fntFontPtr            = font
+      , fntAtlas              = atlas
+      , fntTextureID          = textureID
+      , fntUniforms           = uniforms
+      , fntShader             = shader
+      , fntPointSize          = pointSize
+      , fntVAO                = glyphVAO
+      , fntIndexBuffer        = glyphIndexBuffer
+      , fntOffsetBuffer       = glyphOffsetBuffer
+      , fntGlyphsByChar       = glyphsByChar
+      }
 
 
 renderText :: (Foldable f, MonadIO m) 
@@ -124,43 +116,12 @@ renderText Font{..} string (selStart, selEnd) mvp = do
     uniformI   uTexture 0
     uniformV3  uColor   (V3 1 1 1)
 
-    let blockGlyph  = fntGlyphsByChar ! blockChar
-        cursorGlyph = fntGlyphsByChar ! cursorChar
-        renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indexesF, offsetsF) character = do
-          -- Render newlines as spaces
-          let glyph      = fntGlyphsByChar ! (if character == '\n' then ' ' else character)
-
-          -- Find the optimal kerning between this character and the last one rendered (if any)
-          kerning <- maybe (return 0) (getGlyphKerning (glyGlyphPtr glyph)) maybeLastChar
-
-          -- Adjust the character's x offset to nestle against the previous character
-          let charXOffset = lastXOffset + kerning
-              nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
-              charOffset = V2 charXOffset (-lineNum * fntPointSize)
-              (indexes, offsets) 
-                | charNum == selStart && charNum == selEnd =
-                  let indexes' = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
-                      offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes', offsets')
-                | charNum >= selStart && charNum < selEnd = 
-                  let indexes' = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
-                      offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes', offsets')
-                | otherwise =
-                  let indexes' = glyIndex glyph : indexesF :: [GLint]
-                      offsets' = charOffset     : offsetsF :: [V2 GLfloat]
-                  in (indexes', offsets')
-          
-          return $ if character == '\n'
-              then (charNum + 1, lineNum + 1,           0, Nothing       , indexes, offsets)
-              else (charNum + 1, lineNum    , nextXOffset, Just character, indexes, offsets)
-    (_, _, _, _, indexes, offsets) <- foldlM renderChar (0, 0, 0, Nothing, [], []) string
-    -- liftIO$print (reverse indexes)
-    bufferSubData fntIndexBuffer  (reverse indexes)
-    bufferSubData fntOffsetBuffer (concatMap toList $ reverse offsets)
+    
 
     let numVertices  = 4
         numInstances = fromIntegral (length string)
     withVAO fntVAO $ 
       glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
+
+

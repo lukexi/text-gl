@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
+{-# LANGUAGE RecordWildCards #-}
 module Graphics.GL.Freetype.TextBuffer where
 
 import qualified Data.Sequence as Seq
@@ -10,9 +10,14 @@ import Data.Monoid
 import Data.Foldable
 import Data.List (findIndex)
 import Data.Maybe
+import Data.Map ((!))
+
+import Graphics.GL.Pal
+import System.IO.Unsafe
 -- import Debug.Trace
 
 import Graphics.GL.Freetype.Types
+import Graphics.GL.Freetype.API
 
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
@@ -24,31 +29,33 @@ seqRange :: (Int, Int) -> Seq a -> Seq a
 seqRange (start, end) = Seq.drop start . Seq.take end
 
 
-newTextBuffer :: TextBuffer
-newTextBuffer = TextBuffer 
+newTextBuffer :: Font -> TextBuffer
+newTextBuffer font = TextBuffer 
   { bufSelection = (0,0)
   , bufColumn    = 0
   , bufText      = mempty
   , bufPath      = mempty
+  , bufFont      = font
   }
 
-textBufferFromString :: FilePath -> String -> TextBuffer
-textBufferFromString filePath string = TextBuffer
+textBufferFromString :: Font -> FilePath -> String -> TextBuffer
+textBufferFromString font filePath string = TextBuffer
   { bufSelection = (0,0)
   , bufColumn    = 0
   , bufText      = Seq.fromList string
   , bufPath      = filePath
+  , bufFont      = font
   }
 
 stringFromTextBuffer :: TextBuffer -> String
 stringFromTextBuffer = toList . bufText
 
 selectionFromTextBuffer :: TextBuffer -> String
-selectionFromTextBuffer (TextBuffer selection _ text _) = toList (seqRange selection text)
+selectionFromTextBuffer TextBuffer{..} = toList (seqRange bufSelection bufText)
 
 -- | Returns the number of lines and the number of columns in the longest line
 measureTextBuffer :: TextBuffer -> (Int, Int)
-measureTextBuffer (TextBuffer _ _ text _) = 
+measureTextBuffer TextBuffer{bufText=text} = 
   let lineIndices = Seq.elemIndicesL '\n' text
       numLines = length lineIndices + 1
       numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
@@ -59,19 +66,21 @@ measureTextBuffer (TextBuffer _ _ text _) =
 -- | Find the column in the current line
 -- (in other words, the distance from the previous newline)
 currentColumn :: TextBuffer -> Int
-currentColumn (TextBuffer (start, _) _ text _) =
-  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ text
+currentColumn TextBuffer{..} =
+  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ bufText
+      (start, _) = bufSelection
   in  start - previousNewline
 
 updateCurrentColumn :: TextBuffer -> TextBuffer
 updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
 
 insertTextBuffer :: Seq Char -> TextBuffer -> TextBuffer
-insertTextBuffer chars buffer@(TextBuffer (start, end) _ text _) = updateCurrentColumn $
+insertTextBuffer chars buffer@TextBuffer{..} = updateCurrentColumn $
   buffer { bufSelection = (newCursor, newCursor), bufText = newText }
   where 
-    newText = seqReplace (start, end) chars text
+    newText = seqReplace (start, end) chars bufText
     newCursor = (start + Seq.length chars)
+    (start, end) = bufSelection
 
 insertChar :: Char -> TextBuffer -> TextBuffer
 insertChar char = insertString [char]
@@ -83,34 +92,38 @@ insert :: Seq Char -> TextBuffer -> TextBuffer
 insert chars = insertTextBuffer chars
 
 moveLeft :: TextBuffer -> TextBuffer
-moveLeft = updateCurrentColumn . go
+moveLeft buffer = updateCurrentColumn (go selection)
   where
-    go buffer@(TextBuffer (0, 0) _ _ _) = buffer
-    go buffer@(TextBuffer (start, end) _ _ _) 
+    selection = bufSelection buffer
+    go (0, 0)        = buffer
+    go (start, end)
       | start == end = buffer { bufSelection = (start - 1, start - 1) }
-    go buffer@(TextBuffer (start, _) _ _ _) = buffer { bufSelection = (start, start) }
+    go (start, _)    = buffer { bufSelection = (start, start) }
 
 selectLeft :: TextBuffer -> TextBuffer
-selectLeft = updateCurrentColumn . go
+selectLeft buffer = updateCurrentColumn (go selection)
   where
-    go buffer@(TextBuffer (0,       _) _ _ _) = buffer
-    go buffer@(TextBuffer (start, end) _ _ _) = buffer { bufSelection = (start - 1, end) }
+    selection       = bufSelection buffer
+    go (0,       _) = buffer
+    go (start, end) = buffer { bufSelection = (start - 1, end) }
 
 moveRight :: TextBuffer -> TextBuffer
-moveRight = updateCurrentColumn . go
+moveRight buffer = updateCurrentColumn (go selection)
   where
-    go buffer@(TextBuffer (start, end) _ text _) 
-      | end == Seq.length text = buffer
-      | start == end = buffer { bufSelection = (end + 1, end + 1) }
-    go buffer@(TextBuffer (_, end) _ _ _) = buffer { bufSelection = (end, end) }
+    selection = bufSelection buffer
+    go (start, end)
+      | end == Seq.length (bufText buffer) = buffer
+      | start == end                       = buffer { bufSelection = (end + 1, end + 1) }
+    go (_, end)                            = buffer { bufSelection = (end, end) }
 
 
 selectRight :: TextBuffer -> TextBuffer
-selectRight = updateCurrentColumn . go
+selectRight buffer = updateCurrentColumn (go selection)
   where
-    go buffer@(TextBuffer (_, end) _ text _)
-      | end == Seq.length text = buffer
-    go buffer@(TextBuffer (start, end) _ _ _) = buffer { bufSelection = (start, end + 1) }
+    selection = bufSelection buffer
+    go (_, end)
+      | end == Seq.length (bufText buffer) = buffer
+    go (start, end)                        = buffer { bufSelection = (start, end + 1) }
 
 backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
@@ -157,6 +170,53 @@ moveUp buffer =
             -- Don't jump futher than the prev newline location
             newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
         in buffer { bufSelection = (newCursor, newCursor) }
+
+getGlyphKerning' glyph character = unsafePerformIO (getGlyphKerning (glyGlyphPtr glyph) character)
+
+
+updateIndicesAndOffsets textBuffer = do
+  let (indices, offsets) = calculateIndicesAndOffsets textBuffer
+      Font{..} = bufFont textBuffer
+  -- liftIO$print (reverse indexes)
+  bufferSubData fntIndexBuffer  (reverse indices)
+  bufferSubData fntOffsetBuffer (concatMap toList . reverse $ offsets)
+
+calculateIndicesAndOffsets TextBuffer{..} = 
+  let blockGlyph  = glyphsByChar ! blockChar
+      cursorGlyph = glyphsByChar ! cursorChar
+      glyphsByChar = fntGlyphsByChar bufFont
+      pointSize = fntPointSize bufFont
+      (selStart, selEnd) = bufSelection
+      renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indexesF, offsetsF) character = 
+            -- Render newlines as spaces
+        let glyph   = glyphsByChar ! (if character == '\n' then ' ' else character)
+
+            -- Find the optimal kerning between this character and the last one rendered (if any)
+            kerning = maybe 0 (getGlyphKerning' glyph) maybeLastChar
+
+            -- Adjust the character's x offset to nestle against the previous character
+            charXOffset = lastXOffset + kerning
+            nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
+            charOffset = V2 charXOffset (-lineNum * pointSize)
+            (indexes, offsets) 
+              | charNum == selStart && charNum == selEnd =
+                let indexes' = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
+                    offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
+                in (indexes', offsets')
+              | charNum >= selStart && charNum < selEnd = 
+                let indexes' = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
+                    offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
+                in (indexes', offsets')
+              | otherwise =
+                let indexes' = glyIndex glyph : indexesF :: [GLint]
+                    offsets' = charOffset     : offsetsF :: [V2 GLfloat]
+                in (indexes', offsets')
+        
+        in if character == '\n'
+            then (charNum + 1, lineNum + 1,           0, Nothing       , indexes, offsets)
+            else (charNum + 1, lineNum    , nextXOffset, Just character, indexes, offsets)
+      (_, _, _, _, indexes, offsets) = foldl' renderChar (0, 0, 0, Nothing, [], []) bufText
+  in (indexes, offsets)
 
 -- main = do
 --   flip runStateT newTextBuffer $ do
