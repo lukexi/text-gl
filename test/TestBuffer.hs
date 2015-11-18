@@ -13,8 +13,6 @@ import Control.Monad
 import Control.Monad.State
 import Halive.Utils
 
-import TextBuffer
-
 -- data AppState = AppState 
 --     { _appTextBuffer :: Buffer
 --     }
@@ -34,8 +32,8 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    font          <- createFont fontFile 30 glyphQuadProg
+    glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
+    font      <- createFont fontFile 30 glyphProg
 
     glClearColor 1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
@@ -46,12 +44,12 @@ main = do
 
     text <- readFile "test/TestBuffer.hs"
     -- let initialState = newAppState { _appTextBuffer = bufferFromString text }
-    let initialState = bufferFromString text
+    let initialState = textBufferFromString "test/TestBuffer.hs" text
     void . flip runStateT initialState . whileWindow win $ 
         mainLoop win events font 
 
 
-mainLoop :: (MonadState Buffer m, MonadIO m) => Window -> Events -> Font -> m ()
+mainLoop :: (MonadState TextBuffer m, MonadIO m) => Window -> Events -> Font -> m ()
 mainLoop win events font = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
@@ -68,21 +66,19 @@ mainLoop win events font = do
             | superIsDown ->
                 onKeyDown e Key'S $ do
                     liftIO $ putStrLn "Saving..."
-                    bufferString <- gets stringFromBuffer
+                    bufferString <- gets stringFromTextBuffer
                     liftIO $ writeFile "test/TestBuffer.hs" bufferString
             | shiftIsDown -> do
-                onKeyDown e Key'Left  $ selectLeft
-                onKeyDown e Key'Right $ selectRight
+                onKeyDown e Key'Left  $ id %= selectLeft
+                onKeyDown e Key'Right $ id %= selectRight
             | otherwise -> do
-                case e of
-                    Character char -> insertChar char
-                    _ -> return ()
-                onKeyDown e Key'Backspace $ backspace
-                onKeyDown e Key'Enter     $ insertChar '\n'
-                onKeyDown e Key'Left      $ moveLeft
-                onKeyDown e Key'Right     $ moveRight
-                onKeyDown e Key'Down      $ moveDown
-                onKeyDown e Key'Up        $ moveUp
+                onChar e         $ \char -> id %= insertChar char
+                onKeyDown e Key'Backspace $ id %= backspace
+                onKeyDown e Key'Enter     $ id %= insertChar '\n'
+                onKeyDown e Key'Left      $ id %= moveLeft
+                onKeyDown e Key'Right     $ id %= moveRight
+                onKeyDown e Key'Down      $ id %= moveDown
+                onKeyDown e Key'Up        $ id %= moveUp
 
     immutably $ do
         -- Clear the framebuffer

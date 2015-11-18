@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
-module Graphics.GL.Freetype.GlyphQuad where
+module Graphics.GL.Freetype.Render where
 
 import Graphics.GL.Freetype.API
 
@@ -14,30 +14,7 @@ import qualified Data.Map as Map
 import Data.Map (Map, (!))
 import Data.Foldable
 
-data GlyphUniforms = GlyphUniforms
-    { uMVP             :: UniformLocation (M44 GLfloat)
-    , uTexture         :: UniformLocation GLint
-    , uColor           :: UniformLocation (V3 GLfloat)
-    } deriving Data
-
-data Font = Font 
-    { fntFontPtr       :: FontPtr
-    , fntAtlas         :: TextureAtlas
-    , fntTextureID     :: TextureID
-    , fntUniforms      :: GlyphUniforms
-    , fntShader        :: Program
-    , fntPointSize     :: Float
-    , fntGlyphsByChar  :: Map Char Glyph
-    , fntVAO           :: VertexArrayObject
-    , fntIndexBuffer   :: ArrayBuffer
-    , fntOffsetBuffer  :: ArrayBuffer
-    }
-
-data Glyph = Glyph
-  { glyIndex    :: GLint
-  , glyGlyphPtr :: GlyphPtr
-  , glyMetrics  :: GlyphMetrics
-  }
+import Graphics.GL.Freetype.Types
 
 -- Aka ASCII codes 32-126
 asciiChars :: String

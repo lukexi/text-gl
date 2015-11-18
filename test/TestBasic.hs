@@ -16,8 +16,8 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
 
-    glyphQuadProg <- createShaderProgram "test/glyphQuad.vert" "test/glyphQuad.frag"
-    font          <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphQuadProg
+    glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
+    font      <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphProg
 
     glClearColor 0 0.1 0.1 1
     -- glEnable GL_DEPTH_TEST
