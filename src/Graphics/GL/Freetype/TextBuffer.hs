@@ -10,11 +10,12 @@ import Data.Monoid
 import Data.Foldable
 import Data.List (findIndex)
 import Data.Maybe
-import Data.Map ((!))
 
-import Graphics.GL.Pal
+import Graphics.GL.Pal hiding (trace)
 import System.IO.Unsafe
 -- import Debug.Trace
+
+import Control.Monad.Trans
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
@@ -94,7 +95,7 @@ insert chars = insertTextBuffer chars
 moveLeft :: TextBuffer -> TextBuffer
 moveLeft buffer = updateCurrentColumn (go selection)
   where
-    selection = bufSelection buffer
+    selection        = bufSelection buffer
     go (0, 0)        = buffer
     go (start, end)
       | start == end = buffer { bufSelection = (start - 1, start - 1) }
@@ -171,9 +172,12 @@ moveUp buffer =
             newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
         in buffer { bufSelection = (newCursor, newCursor) }
 
+getGlyphKerning' :: Glyph -> Char -> Float
 getGlyphKerning' glyph character = unsafePerformIO (getGlyphKerning (glyGlyphPtr glyph) character)
 
-
+-- | Recalculates the character indices and glyph offsets of a TextBuffer 
+-- and writes them into the UBO
+updateIndicesAndOffsets :: MonadIO m => TextBuffer -> m ()
 updateIndicesAndOffsets textBuffer = do
   let (indices, offsets) = calculateIndicesAndOffsets textBuffer
       Font{..} = bufFont textBuffer
@@ -181,15 +185,17 @@ updateIndicesAndOffsets textBuffer = do
   bufferSubData fntIndexBuffer  (reverse indices)
   bufferSubData fntOffsetBuffer (concatMap toList . reverse $ offsets)
 
+-- | Recalculates the character indices and glyph offsets of a TextBuffer
+calculateIndicesAndOffsets :: TextBuffer -> ([GLint], [V2 GLfloat])
 calculateIndicesAndOffsets TextBuffer{..} = 
-  let blockGlyph  = glyphsByChar ! blockChar
-      cursorGlyph = glyphsByChar ! cursorChar
-      glyphsByChar = fntGlyphsByChar bufFont
-      pointSize = fntPointSize bufFont
+  let blockGlyph         = glyphForChar blockChar
+      cursorGlyph        = glyphForChar cursorChar
+      glyphForChar       = fntGlyphForChar bufFont
+      pointSize          = fntPointSize bufFont
       (selStart, selEnd) = bufSelection
-      renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indexesF, offsetsF) character = 
+      renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indicesF, offsetsF) character = 
             -- Render newlines as spaces
-        let glyph   = glyphsByChar ! (if character == '\n' then ' ' else character)
+        let glyph   = glyphForChar (if character == '\n' then ' ' else character)
 
             -- Find the optimal kerning between this character and the last one rendered (if any)
             kerning = maybe 0 (getGlyphKerning' glyph) maybeLastChar
@@ -197,26 +203,26 @@ calculateIndicesAndOffsets TextBuffer{..} =
             -- Adjust the character's x offset to nestle against the previous character
             charXOffset = lastXOffset + kerning
             nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
-            charOffset = V2 charXOffset (-lineNum * pointSize)
-            (indexes, offsets) 
+            charOffset  = V2 charXOffset (-lineNum * pointSize)
+            (newIndices, newOffsets) 
               | charNum == selStart && charNum == selEnd =
-                let indexes' = glyIndex cursorGlyph : glyIndex glyph : indexesF :: [GLint]
+                let indices' = glyIndex cursorGlyph : glyIndex glyph : indicesF :: [GLint]
                     offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indexes', offsets')
+                in (indices', offsets')
               | charNum >= selStart && charNum < selEnd = 
-                let indexes' = glyIndex blockGlyph : glyIndex glyph : indexesF :: [GLint]
+                let indices' = glyIndex blockGlyph : glyIndex glyph : indicesF :: [GLint]
                     offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indexes', offsets')
+                in (indices', offsets')
               | otherwise =
-                let indexes' = glyIndex glyph : indexesF :: [GLint]
+                let indices' = glyIndex glyph : indicesF :: [GLint]
                     offsets' = charOffset     : offsetsF :: [V2 GLfloat]
-                in (indexes', offsets')
+                in (indices', offsets')
         
         in if character == '\n'
-            then (charNum + 1, lineNum + 1,           0, Nothing       , indexes, offsets)
-            else (charNum + 1, lineNum    , nextXOffset, Just character, indexes, offsets)
-      (_, _, _, _, indexes, offsets) = foldl' renderChar (0, 0, 0, Nothing, [], []) bufText
-  in (indexes, offsets)
+            then (charNum + 1, lineNum + 1,           0, Nothing       , newIndices, newOffsets)
+            else (charNum + 1, lineNum    , nextXOffset, Just character, newIndices, newOffsets)
+      (_, _, _, _, indices, offsets) = foldl' renderChar (0, 0, 0, Nothing, [], []) bufText
+  in (indices, offsets)
 
 -- main = do
 --   flip runStateT newTextBuffer $ do

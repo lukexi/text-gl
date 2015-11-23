@@ -10,7 +10,7 @@ import Graphics.GL.Freetype.API
 
 -- Aka ASCII codes 32-126
 asciiChars :: String
-asciiChars = cursorChar:blockChar:[' '..'~']
+asciiChars = [' '..'~']
 
 blockChar :: Char
 blockChar = '█'
@@ -24,7 +24,6 @@ data GlyphUniforms = GlyphUniforms
   , uColor           :: UniformLocation (V3 GLfloat)
   } deriving (Data, Show)
 
-
 data Font = Font 
   { fntFontPtr       :: FontPtr
   , fntAtlas         :: TextureAtlas
@@ -32,11 +31,13 @@ data Font = Font
   , fntUniforms      :: GlyphUniforms
   , fntShader        :: Program
   , fntPointSize     :: Float
-  , fntGlyphsByChar  :: Map Char Glyph
+  , fntGlyphForChar  :: Char -> Glyph
   , fntVAO           :: VertexArrayObject
   , fntIndexBuffer   :: ArrayBuffer
   , fntOffsetBuffer  :: ArrayBuffer
-  } deriving Show
+  }
+instance Show Font where
+  show _ = "Font {}"
 
 data Glyph = Glyph
   { glyIndex    :: GLint

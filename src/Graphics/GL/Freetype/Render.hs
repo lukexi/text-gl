@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns #-}
 module Graphics.GL.Freetype.Render where
 
 import Graphics.GL.Freetype.API
@@ -23,12 +24,13 @@ createFont fontFile pointSize shader = createFontWithChars fontFile pointSize sh
 
 createFontWithChars :: String -> Float -> Program -> String -> IO Font
 createFontWithChars fontFile pointSize shader characters = do
+    let allCharacters = cursorChar:blockChar:characters
     -- Create an atlas to hold the characters
     atlas  <- newTextureAtlas 1024 1024 BitDepth1
     -- Create a font and associate it with the atlas
     font   <- newFontFromFile atlas pointSize fontFile
     -- Load the characters into the atlas
-    missed <- loadFontGlyphs font characters
+    missed <- loadFontGlyphs font allCharacters
     when (missed > 0) $
       putStrLn ("Tried to load too many characters! Missed: " ++ show missed)
     
@@ -53,13 +55,13 @@ createFontWithChars fontFile pointSize shader characters = do
 
           charMetricsStructureFlattened = charPositions
 
-          glyph = Glyph { glyIndex = i, glyGlyphPtr = glyphPtr, glyMetrics = metrics }
+          glyph                  = Glyph { glyIndex = i, glyGlyphPtr = glyphPtr, glyMetrics = metrics }
           newAllCharacterMetrics = allCharacterMetrics ++ charMetricsStructureFlattened
           newGlyphsByChar        = Map.insert character glyph glyphsByChar
       -- print character
       -- print (charPositions)
       return (newAllCharacterMetrics, newGlyphsByChar)
-      ) mempty (zip characters [0..])
+      ) mempty (zip allCharacters [0..])
 
     charMetricsBuffer <- bufferUniformData GL_STATIC_DRAW characterMetrics
 
@@ -90,6 +92,10 @@ createFontWithChars fontFile pointSize shader characters = do
 
     uniforms <- acquireUniforms shader
 
+    let !blockGlyph = glyphsByChar ! blockChar
+        glyphForChar aChar = case Map.lookup aChar glyphsByChar of
+          Just glyph -> glyph
+          Nothing    -> blockGlyph
     return Font
       { fntFontPtr            = font
       , fntAtlas              = atlas
@@ -100,7 +106,7 @@ createFontWithChars fontFile pointSize shader characters = do
       , fntVAO                = glyphVAO
       , fntIndexBuffer        = glyphIndexBuffer
       , fntOffsetBuffer       = glyphOffsetBuffer
-      , fntGlyphsByChar       = glyphsByChar
+      , fntGlyphForChar       = glyphForChar
       }
 
 
