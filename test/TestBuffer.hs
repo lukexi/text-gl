@@ -21,10 +21,10 @@ import Halive.Utils
 -- newAppState = AppState { _appLines = mempty }
 
 fontFile :: FilePath
-fontFile = "freetype-gl/fonts/Vera.ttf"
+-- fontFile = "freetype-gl/fonts/Vera.ttf"
 -- fontFile = "freetype-gl/fonts/Lobster-Regular.ttf"
 -- fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
--- fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
+fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
 
 
 main :: IO ()
@@ -33,9 +33,9 @@ main = do
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
     glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
-    font      <- createFont fontFile 30 glyphProg
+    font      <- createFont fontFile 50 glyphProg
 
-    glClearColor 1 0.1 0.1 1
+    glClearColor 0.1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
     glDisable GL_DEPTH_TEST
 
@@ -44,7 +44,8 @@ main = do
 
     text <- readFile "test/TestBuffer.hs"
     -- let initialState = newAppState { _appTextBuffer = bufferFromString text }
-    let initialState = textBufferFromString "test/TestBuffer.hs" text
+    let initialState = textBufferFromString font "test/TestBuffer.hs" text
+    updateIndicesAndOffsets initialState
     void . flip runStateT initialState . whileWindow win $ 
         mainLoop win events font 
 
@@ -69,16 +70,16 @@ mainLoop win events font = do
                     bufferString <- gets stringFromTextBuffer
                     liftIO $ writeFile "test/TestBuffer.hs" bufferString
             | shiftIsDown -> do
-                onKeyDown e Key'Left  $ id %= selectLeft
-                onKeyDown e Key'Right $ id %= selectRight
+                onKey e Key'Left  $ id %= selectLeft
+                onKey e Key'Right $ id %= selectRight
             | otherwise -> do
                 onChar e         $ \char -> id %= insertChar char
-                onKeyDown e Key'Backspace $ id %= backspace
-                onKeyDown e Key'Enter     $ id %= insertChar '\n'
-                onKeyDown e Key'Left      $ id %= moveLeft
-                onKeyDown e Key'Right     $ id %= moveRight
-                onKeyDown e Key'Down      $ id %= moveDown
-                onKeyDown e Key'Up        $ id %= moveUp
+                onKey e Key'Backspace $ id %= backspace
+                onKey e Key'Enter     $ id %= insertChar '\n'
+                onKey e Key'Left      $ id %= moveLeft
+                onKey e Key'Right     $ id %= moveRight
+                onKey e Key'Down      $ id %= moveDown
+                onKey e Key'Up        $ id %= moveUp
         
         updateIndicesAndOffsets =<< use id
 
