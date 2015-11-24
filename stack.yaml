@@ -6,5 +6,4 @@ packages:
 - '../glfw-pal'
 - '../halive'
 - '../lens-extra'
-- '../bindings-GLFW-3.1.1.4/'
 resolver: nightly-2015-11-03
