@@ -65,7 +65,7 @@ foreign import ccall "texture_glyph_get_kerning"
 
 -- | Gets the kerning between two glyphs — e.g if rendering "Hi", 
 -- pass the glyph for i along with 'H',
--- and add the returned offset to i's position
+-- and add the returned x offset to i's position
 getGlyphKerning :: MonadIO m => GlyphPtr -> Char -> m Float
 getGlyphKerning glyph char = liftIO $ 
     withCWString [char] $ \charPtr -> do

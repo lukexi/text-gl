@@ -5,7 +5,7 @@
 module Graphics.GL.Freetype.TextBuffer where
 
 import qualified Data.Sequence as Seq
-import Data.Sequence (Seq)
+import Data.Sequence (Seq, (|>))
 import Data.Monoid
 import Data.Foldable
 import Data.List (findIndex)
@@ -29,11 +29,12 @@ seqReplace (start, end) xs original = left <> xs <> right
 seqRange :: (Int, Int) -> Seq a -> Seq a
 seqRange (start, end) = Seq.drop start . Seq.take end
 
-
+-- we insert an invisible '\n' to act as the beginning of the text, 
+-- so the initial column becomes 1
 newTextBuffer :: Font -> TextBuffer
 newTextBuffer font = TextBuffer 
   { bufSelection = (0,0)
-  , bufColumn    = 0
+  , bufColumn    = 1 
   , bufText      = mempty
   , bufPath      = mempty
   , bufFont      = font
@@ -42,7 +43,7 @@ newTextBuffer font = TextBuffer
 textBufferFromString :: Font -> FilePath -> String -> TextBuffer
 textBufferFromString font filePath string = TextBuffer
   { bufSelection = (0,0)
-  , bufColumn    = 0
+  , bufColumn    = 1
   , bufText      = Seq.fromList string
   , bufPath      = filePath
   , bufFont      = font
@@ -55,8 +56,8 @@ selectionFromTextBuffer :: TextBuffer -> String
 selectionFromTextBuffer TextBuffer{..} = toList (seqRange bufSelection bufText)
 
 -- | Returns the number of lines and the number of columns in the longest line
-measureTextBuffer :: TextBuffer -> (Int, Int)
-measureTextBuffer TextBuffer{bufText=text} = 
+measureText :: Seq Char -> (Int, Int)
+measureText text = 
   let lineIndices = Seq.elemIndicesL '\n' text
       numLines = length lineIndices + 1
       numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
@@ -143,7 +144,6 @@ moveToBeginning buffer = updateCurrentColumn $
 moveDown :: TextBuffer -> TextBuffer
 moveDown buffer = 
   let (cursorLocation, _)     = bufSelection buffer
-      -- Add an artificial "newline" at -1 to represent the beginning of the document
       lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
   -- If there's no newline beyond the cursor, do nothing
   in case findIndex (>= cursorLocation) lineLocations of
@@ -157,9 +157,12 @@ moveDown buffer =
         in buffer { bufSelection = (newCursor, newCursor) }
 
 
+-- We still update the current column for the case
+-- where we press up on the first line and return to column 0
 moveUp :: TextBuffer -> TextBuffer
-moveUp buffer =
+moveUp buffer = 
   let (cursorLocation, _)     = bufSelection buffer
+      -- Add artificial 'newlines' at the beginning of the document to simplify the algorithm
       lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
   -- If there's no newline beyond the cursor, do nothing
   in case findIndex (>= cursorLocation) lineLocations of
@@ -170,7 +173,9 @@ moveUp buffer =
             currentDistanceFromLeft = bufColumn buffer
             -- Don't jump futher than the prev newline location
             newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
-        in buffer { bufSelection = (newCursor, newCursor) }
+            -- Update the column iff we have hit up enough times to return to the beginning of the text
+            newColumn = if newCursor == 1 then 1 else bufColumn buffer
+        in buffer { bufSelection = (newCursor, newCursor), bufColumn = newColumn }
 
 getGlyphKerning' :: Glyph -> Char -> Float
 getGlyphKerning' glyph character = unsafePerformIO (getGlyphKerning (glyGlyphPtr glyph) character)
@@ -221,7 +226,7 @@ calculateIndicesAndOffsets TextBuffer{..} =
         in if character == '\n'
             then (charNum + 1, lineNum + 1,           0, Nothing       , newIndices, newOffsets)
             else (charNum + 1, lineNum    , nextXOffset, Just character, newIndices, newOffsets)
-      (_, _, _, _, indices, offsets) = foldl' renderChar (0, 0, 0, Nothing, [], []) bufText
+      (_, _, _, _, indices, offsets) = foldl' renderChar (0, 1, 0, Nothing, [], []) bufText
   in (indices, offsets)
 
 -- main = do
