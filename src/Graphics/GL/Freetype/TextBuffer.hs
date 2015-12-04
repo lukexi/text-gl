@@ -14,11 +14,13 @@ import Data.Maybe
 import Graphics.GL.Pal hiding (trace)
 import System.IO.Unsafe
 -- import Debug.Trace
+import Control.Lens
 
 import Control.Monad.Trans
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
+import Graphics.GL.Freetype.Render
 
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
@@ -228,6 +230,47 @@ calculateIndicesAndOffsets TextBuffer{..} =
             else (charNum + 1, lineNum    , nextXOffset, Just character, newIndices, newOffsets)
       (_, _, _, _, indices, offsets) = foldl' renderChar (0, 1, 0, Nothing, [], []) bufText
   in (indices, offsets)
+
+
+
+-- | This is quick and dirty.
+-- We should keep the bounding boxes of the characters during
+-- calculateIndicesAndOffsets, which we should cache in the TextBuffer.
+-- We currently use the point side which is quite wrong
+
+castRayToBuffer ray buffer model44 = do
+  let textModel44  = model44 !*! correctionMatrixForFont font
+      font         = bufFont buffer
+      aabb         = (0, V3 1 (-1) 0) -- Is this right??
+      rayDir       = directionFromRay ray
+      intersection = rayOBBIntersection ray aabb textModel44
+
+  case intersection of
+      Nothing -> return buffer
+      Just intersectionDistance -> do
+          let worldPoint = rayDir ^* intersectionDistance
+              modelPoint = worldPointToModelPoint textModel44 worldPoint
+              -- The width here is a guess; should get this from GlyphMetrics
+              -- during updateIndicesAndOffsets
+              (charW, charH) = (fntPointSize font * 0.66, fntPointSize font)
+
+              (_indices, offsets) = calculateIndicesAndOffsets buffer
+              (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
+              hits = filter (\(_i, V2 x y) -> 
+                             cursX > x 
+                          && cursX < (x + charW) 
+                          && cursY > y 
+                          && cursY < (y + charH)) (zip [0..] offsets)
+              numChars = length offsets
+          case reverse hits of
+            [] -> return buffer
+            ((i, _):_) -> do
+              -- Indices from calculateIndicesAndOffsets are reversed
+              let realIndex = numChars - i
+                  newBuffer = updateCurrentColumn $
+                                buffer {bufSelection = (realIndex, realIndex)}
+              updateIndicesAndOffsets newBuffer
+              return newBuffer
 
 -- main = do
 --   flip runStateT newTextBuffer $ do

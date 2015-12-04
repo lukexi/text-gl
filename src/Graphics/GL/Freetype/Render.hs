@@ -111,23 +111,33 @@ createFontWithChars fontFile pointSize shader characters = do
 
 
 renderText :: (Foldable f, MonadIO m) 
-           => Font -> f Char -> (Int, Int) -> M44 GLfloat -> m ()
-renderText Font{..} string (selStart, selEnd) mvp = do
+            => Font -> V3 GLfloat -> f Char -> M44 GLfloat -> m ()
+renderText font@Font{..} color string mvp = do
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
     let GlyphUniforms{..} = fntUniforms
-
-    uniformM44 uMVP     (mvp !*! scaleMatrix 0.005)
+        correctedMVP = mvp !*! correctionMatrixForFont font
+                           
+    uniformM44 uMVP     correctedMVP
     uniformI   uTexture 0
-    uniformV3  uColor   (V3 1 1 1)
+    uniformV3  uColor   color
 
-    
 
     let numVertices  = 4
-        numInstances = fromIntegral (length string)
+        -- Add 1 to ensure we still render the cursor
+        numInstances = fromIntegral (length string + 1)
     withVAO fntVAO $ 
       glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
 
-
+correctionMatrixForFont :: Fractional a => Font -> M44 a
+correctionMatrixForFont Font{..} = correctedMVP
+  where
+    -- Ensures the characters are always the same 
+    -- size no matter what point size was specified
+    resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
+    -- Also scale by the width of a wide character
+    charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
+    correctedMVP = translateMatrix (V3 (-0.5) (0.5) 0) 
+               !*! scaleMatrix resolutionCompensationScale
