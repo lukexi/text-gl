@@ -13,12 +13,6 @@ import Control.Monad
 import Control.Monad.State
 import Halive.Utils
 
--- data AppState = AppState 
---     { _appTextBuffer :: Buffer
---     }
--- makeLenses ''AppState
--- newAppState :: AppState
--- newAppState = AppState { _appLines = mempty }
 
 fontFile :: FilePath
 -- fontFile = "freetype-gl/fonts/Vera.ttf"
@@ -37,21 +31,18 @@ main = do
 
     glClearColor 0.1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
-    glDisable GL_DEPTH_TEST
 
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
     text <- readFile "test/TestBuffer.hs"
-    -- let initialState = newAppState { _appTextBuffer = bufferFromString text }
-    let initialState = textBufferFromString font "test/TestBuffer.hs" text
-    updateIndicesAndOffsets initialState
+    initialState <- createTextRenderer font $ textBufferFromString "test/TestBuffer.hs" text
     void . flip runStateT initialState . whileWindow win $ 
-        mainLoop win events font 
+        mainLoop win events
 
 
-mainLoop :: (MonadState TextBuffer m, MonadIO m) => Window -> Events -> Font -> m ()
-mainLoop win events font = do
+mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
+mainLoop win events = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
     projection44 <- getWindowProjection win 45 0.01 1000
@@ -67,21 +58,21 @@ mainLoop win events font = do
             | superIsDown ->
                 onKeyDown e Key'S $ do
                     liftIO $ putStrLn "Saving..."
-                    bufferString <- gets stringFromTextBuffer
+                    bufferString <- stringFromTextBuffer <$> use txrTextBuffer 
                     liftIO $ writeFile "test/TestBuffer.hs" bufferString
             | shiftIsDown -> do
-                onKey e Key'Left  $ id %= selectLeft
-                onKey e Key'Right $ id %= selectRight
+                onKey e Key'Left      $ txrTextBuffer %= selectLeft
+                onKey e Key'Right     $ txrTextBuffer %= selectRight
             | otherwise -> do
-                onChar e         $ \char -> id %= insertChar char
-                onKey e Key'Backspace $ id %= backspace
-                onKey e Key'Enter     $ id %= insertChar '\n'
-                onKey e Key'Left      $ id %= moveLeft
-                onKey e Key'Right     $ id %= moveRight
-                onKey e Key'Down      $ id %= moveDown
-                onKey e Key'Up        $ id %= moveUp
+                onChar e     $ \char -> txrTextBuffer %= insertChar char
+                onKey e Key'Backspace $ txrTextBuffer %= backspace
+                onKey e Key'Enter     $ txrTextBuffer %= insertChar '\n'
+                onKey e Key'Left      $ txrTextBuffer %= moveLeft
+                onKey e Key'Right     $ txrTextBuffer %= moveRight
+                onKey e Key'Down      $ txrTextBuffer %= moveDown
+                onKey e Key'Up        $ txrTextBuffer %= moveUp
         
-        updateIndicesAndOffsets =<< use id
+        put =<< updateMetrics =<< get
 
     immutably $ do
         -- Clear the framebuffer
@@ -89,11 +80,11 @@ mainLoop win events font = do
 
         -- Render our scene
         let view44       = viewMatrixFromPose newPose
-            model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-2) (2) (-4))
+            model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-2) (1) (-4))
             mvp          = projection44 !*! view44 !*! model44
 
-        buffer <- get
-        renderText font (bufText buffer) (bufSelection buffer) mvp
+        textRenderer <- get
+        renderText textRenderer mvp (V3 1 1 1)
         
         swapBuffers win
 

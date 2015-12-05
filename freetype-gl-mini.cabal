@@ -20,9 +20,11 @@ library
   exposed-modules:     
     Graphics.GL.Freetype
     Graphics.GL.Freetype.API
-    Graphics.GL.Freetype.Render
+    Graphics.GL.Freetype.Font
     Graphics.GL.Freetype.Types
     Graphics.GL.Freetype.TextBuffer
+    Graphics.GL.Freetype.TextRenderer
+    Graphics.GL.Freetype.TextMetrics
   -- other-modules:       
   -- other-extensions:    
   build-depends:       

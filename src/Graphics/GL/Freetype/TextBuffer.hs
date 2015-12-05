@@ -5,22 +5,13 @@
 module Graphics.GL.Freetype.TextBuffer where
 
 import qualified Data.Sequence as Seq
-import Data.Sequence (Seq, (|>))
+import Data.Sequence (Seq)
 import Data.Monoid
 import Data.Foldable
 import Data.List (findIndex)
 import Data.Maybe
 
-import Graphics.GL.Pal hiding (trace)
-import System.IO.Unsafe
--- import Debug.Trace
-import Control.Lens
-
-import Control.Monad.Trans
-
 import Graphics.GL.Freetype.Types
-import Graphics.GL.Freetype.API
-import Graphics.GL.Freetype.Render
 
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
@@ -33,22 +24,20 @@ seqRange (start, end) = Seq.drop start . Seq.take end
 
 -- we insert an invisible '\n' to act as the beginning of the text, 
 -- so the initial column becomes 1
-newTextBuffer :: Font -> TextBuffer
-newTextBuffer font = TextBuffer 
+newTextBuffer :: TextBuffer
+newTextBuffer = TextBuffer 
   { bufSelection = (0,0)
   , bufColumn    = 1 
   , bufText      = mempty
   , bufPath      = mempty
-  , bufFont      = font
   }
 
-textBufferFromString :: Font -> FilePath -> String -> TextBuffer
-textBufferFromString font filePath string = TextBuffer
+textBufferFromString :: FilePath -> String -> TextBuffer
+textBufferFromString filePath string = TextBuffer
   { bufSelection = (0,0)
   , bufColumn    = 1
   , bufText      = Seq.fromList string
   , bufPath      = filePath
-  , bufFont      = font
   }
 
 stringFromTextBuffer :: TextBuffer -> String
@@ -95,14 +84,17 @@ insertString string = insert (Seq.fromList string)
 insert :: Seq Char -> TextBuffer -> TextBuffer
 insert chars = insertTextBuffer chars
 
+moveCursorTo :: Int -> TextBuffer -> TextBuffer
+moveCursorTo i buffer = updateCurrentColumn $ buffer { bufSelection = (i, i) }
+
 moveLeft :: TextBuffer -> TextBuffer
-moveLeft buffer = updateCurrentColumn (go selection)
+moveLeft buffer = go selection
   where
     selection        = bufSelection buffer
     go (0, 0)        = buffer
     go (start, end)
-      | start == end = buffer { bufSelection = (start - 1, start - 1) }
-    go (start, _)    = buffer { bufSelection = (start, start) }
+      | start == end = moveCursorTo (start - 1) buffer
+    go (start, _)    = moveCursorTo start buffer
 
 selectLeft :: TextBuffer -> TextBuffer
 selectLeft buffer = updateCurrentColumn (go selection)
@@ -135,13 +127,12 @@ backspace buffer =
   in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
 
 moveToEnd :: TextBuffer -> TextBuffer
-moveToEnd buffer = updateCurrentColumn $
+moveToEnd buffer = 
   let end = Seq.length (bufText buffer)
-  in buffer { bufSelection = (end, end) }
+  in moveCursorTo end buffer
 
 moveToBeginning :: TextBuffer -> TextBuffer
-moveToBeginning buffer = updateCurrentColumn $
-  buffer { bufSelection = (0, 0) }
+moveToBeginning = moveCursorTo 0
 
 moveDown :: TextBuffer -> TextBuffer
 moveDown buffer = 
@@ -156,6 +147,7 @@ moveDown buffer =
             currentDistanceFromLeft = bufColumn buffer
             -- Don't jump futher than the next newline location
             newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
+        -- Don't use moveCursorTo here since we don't want to update the column
         in buffer { bufSelection = (newCursor, newCursor) }
 
 
@@ -179,98 +171,7 @@ moveUp buffer =
             newColumn = if newCursor == 1 then 1 else bufColumn buffer
         in buffer { bufSelection = (newCursor, newCursor), bufColumn = newColumn }
 
-getGlyphKerning' :: Glyph -> Char -> Float
-getGlyphKerning' glyph character = unsafePerformIO (getGlyphKerning (glyGlyphPtr glyph) character)
 
--- | Recalculates the character indices and glyph offsets of a TextBuffer 
--- and writes them into the UBO
-updateIndicesAndOffsets :: MonadIO m => TextBuffer -> m ()
-updateIndicesAndOffsets textBuffer = do
-  let (indices, offsets) = calculateIndicesAndOffsets textBuffer
-      Font{..} = bufFont textBuffer
-  -- liftIO$print (reverse indexes)
-  bufferSubData fntIndexBuffer  (reverse indices)
-  bufferSubData fntOffsetBuffer (concatMap toList . reverse $ offsets)
-
--- | Recalculates the character indices and glyph offsets of a TextBuffer
-calculateIndicesAndOffsets :: TextBuffer -> ([GLint], [V2 GLfloat])
-calculateIndicesAndOffsets TextBuffer{..} = 
-  let blockGlyph         = glyphForChar blockChar
-      cursorGlyph        = glyphForChar cursorChar
-      glyphForChar       = fntGlyphForChar bufFont
-      pointSize          = fntPointSize bufFont
-      (selStart, selEnd) = bufSelection
-      renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indicesF, offsetsF) character = 
-            -- Render newlines as spaces
-        let glyph   = glyphForChar (if character == '\n' then ' ' else character)
-
-            -- Find the optimal kerning between this character and the last one rendered (if any)
-            kerning = maybe 0 (getGlyphKerning' glyph) maybeLastChar
-
-            -- Adjust the character's x offset to nestle against the previous character
-            charXOffset = lastXOffset + kerning
-            nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
-            charOffset  = V2 charXOffset (-lineNum * pointSize)
-            (newIndices, newOffsets) 
-              | charNum == selStart && charNum == selEnd =
-                let indices' = glyIndex cursorGlyph : glyIndex glyph : indicesF :: [GLint]
-                    offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indices', offsets')
-              | charNum >= selStart && charNum < selEnd = 
-                let indices' = glyIndex blockGlyph : glyIndex glyph : indicesF :: [GLint]
-                    offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indices', offsets')
-              | otherwise =
-                let indices' = glyIndex glyph : indicesF :: [GLint]
-                    offsets' = charOffset     : offsetsF :: [V2 GLfloat]
-                in (indices', offsets')
-        
-        in if character == '\n'
-            then (charNum + 1, lineNum + 1,           0, Nothing       , newIndices, newOffsets)
-            else (charNum + 1, lineNum    , nextXOffset, Just character, newIndices, newOffsets)
-      (_, _, _, _, indices, offsets) = foldl' renderChar (0, 1, 0, Nothing, [], []) bufText
-  in (indices, offsets)
-
-
-
--- | This is quick and dirty.
--- We should keep the bounding boxes of the characters during
--- calculateIndicesAndOffsets, which we should cache in the TextBuffer.
--- We currently use the point side which is quite wrong
-
-castRayToBuffer ray buffer model44 = do
-  let textModel44  = model44 !*! correctionMatrixForFont font
-      font         = bufFont buffer
-      aabb         = (0, V3 1 (-1) 0) -- Is this right??
-      rayDir       = directionFromRay ray
-      intersection = rayOBBIntersection ray aabb textModel44
-
-  case intersection of
-      Nothing -> return buffer
-      Just intersectionDistance -> do
-          let worldPoint = rayDir ^* intersectionDistance
-              modelPoint = worldPointToModelPoint textModel44 worldPoint
-              -- The width here is a guess; should get this from GlyphMetrics
-              -- during updateIndicesAndOffsets
-              (charW, charH) = (fntPointSize font * 0.66, fntPointSize font)
-
-              (_indices, offsets) = calculateIndicesAndOffsets buffer
-              (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
-              hits = filter (\(_i, V2 x y) -> 
-                             cursX > x 
-                          && cursX < (x + charW) 
-                          && cursY > y 
-                          && cursY < (y + charH)) (zip [0..] offsets)
-              numChars = length offsets
-          case reverse hits of
-            [] -> return buffer
-            ((i, _):_) -> do
-              -- Indices from calculateIndicesAndOffsets are reversed
-              let realIndex = numChars - i
-                  newBuffer = updateCurrentColumn $
-                                buffer {bufSelection = (realIndex, realIndex)}
-              updateIndicesAndOffsets newBuffer
-              return newBuffer
 
 -- main = do
 --   flip runStateT newTextBuffer $ do

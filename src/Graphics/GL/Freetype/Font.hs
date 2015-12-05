@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
-module Graphics.GL.Freetype.Render where
+module Graphics.GL.Freetype.Font where
 
 import Graphics.GL.Freetype.API
 
@@ -63,6 +63,12 @@ createFontWithChars fontFile pointSize shader characters = do
       return (newAllCharacterMetrics, newGlyphsByChar)
       ) mempty (zip allCharacters [0..])
 
+    -- We store our GlyphMetrics in a global uniform buffer.
+    -- TODO this restricts us to one font at the moment... figure out how to
+    -- get around that cleanly.
+    -- Could use an array of Character arrays in the UBO and assign each font
+    -- an index... but it feels like there must be a cleaner method that just 
+    -- lets us pass a charMetricsBuffer ID directly to the shader.
     charMetricsBuffer <- bufferUniformData GL_STATIC_DRAW characterMetrics
 
     -- Set up our UBO globally
@@ -71,25 +77,7 @@ createFontWithChars fontFile pointSize shader characters = do
 
     -- Bind the shader's uniform buffer declaration to the correct uniform buffer object
     bindShaderUniformBuffer shader "charactersBlock" charMetricsBindingPoint
-
-    glyphVAO <- newVAO
-
-    -- Reserve space for 10000 characters
-    glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..10000] :: [GLint])
-    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (concatMap toList (replicate 10000 (0::V2 GLfloat)))
-
-    withVAO glyphVAO $ do
-      withArrayBuffer glyphIndexBuffer $ do
-        let name = "aInstanceGlyphIndex"
-        attribute <- getShaderAttribute shader name
-        assignIntegerAttribute shader name GL_INT 1
-        vertexAttribDivisor attribute 1
-      withArrayBuffer glyphOffsetBuffer $ do
-        let name = "aInstanceCharacterOffset"
-        attribute <- getShaderAttribute shader name
-        assignFloatAttribute shader name GL_FLOAT 2
-        vertexAttribDivisor attribute 1
-
+    
     uniforms <- acquireUniforms shader
 
     let !blockGlyph = glyphsByChar ! blockChar
@@ -103,33 +91,11 @@ createFontWithChars fontFile pointSize shader characters = do
       , fntUniforms           = uniforms
       , fntShader             = shader
       , fntPointSize          = pointSize
-      , fntVAO                = glyphVAO
-      , fntIndexBuffer        = glyphIndexBuffer
-      , fntOffsetBuffer       = glyphOffsetBuffer
       , fntGlyphForChar       = glyphForChar
       }
 
 
-renderText :: (Foldable f, MonadIO m) 
-            => Font -> V3 GLfloat -> f Char -> M44 GLfloat -> m ()
-renderText font@Font{..} color string mvp = do
-    useProgram fntShader
-    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
-    let GlyphUniforms{..} = fntUniforms
-        correctedMVP = mvp !*! correctionMatrixForFont font
-                           
-    uniformM44 uMVP     correctedMVP
-    uniformI   uTexture 0
-    uniformV3  uColor   color
-
-
-    let numVertices  = 4
-        -- Add 1 to ensure we still render the cursor
-        numInstances = fromIntegral (length string + 1)
-    withVAO fntVAO $ 
-      glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
-    return ()
 
 correctionMatrixForFont :: Fractional a => Font -> M44 a
 correctionMatrixForFont Font{..} = correctedMVP

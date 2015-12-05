@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module Graphics.GL.Freetype.Types where
 
@@ -7,6 +8,9 @@ import Data.Map (Map)
 import Data.Sequence (Seq)
 
 import Graphics.GL.Freetype.API
+import Control.Lens
+
+import System.IO.Unsafe
 
 -- Aka ASCII codes 32-126
 asciiChars :: String
@@ -18,6 +22,15 @@ blockChar = '█'
 cursorChar :: Char
 cursorChar = '▏'
 
+data Glyph = Glyph
+  { glyIndex    :: !GLint
+  , glyGlyphPtr :: !GlyphPtr
+  , glyMetrics  :: !GlyphMetrics
+  } deriving Show
+
+getGlyphKerning :: Glyph -> Char -> Float
+getGlyphKerning glyph character = unsafePerformIO (getGlyphKerningIO (glyGlyphPtr glyph) character)
+
 data GlyphUniforms = GlyphUniforms
   { uMVP             :: UniformLocation (M44 GLfloat)
   , uTexture         :: UniformLocation GLint
@@ -25,30 +38,38 @@ data GlyphUniforms = GlyphUniforms
   } deriving (Data, Show)
 
 data Font = Font 
-  { fntFontPtr       :: FontPtr
-  , fntAtlas         :: TextureAtlas
-  , fntTextureID     :: TextureID
-  , fntUniforms      :: GlyphUniforms
-  , fntShader        :: Program
-  , fntPointSize     :: Float
-  , fntGlyphForChar  :: Char -> Glyph
-  , fntVAO           :: VertexArrayObject
-  , fntIndexBuffer   :: ArrayBuffer
-  , fntOffsetBuffer  :: ArrayBuffer
+  { fntFontPtr       :: !FontPtr
+  , fntAtlas         :: !TextureAtlas
+  , fntTextureID     :: !TextureID
+  , fntUniforms      :: !GlyphUniforms
+  , fntShader        :: !Program
+  , fntPointSize     :: !Float
+  , fntGlyphForChar  :: !(Char -> Glyph)
   }
 instance Show Font where
   show _ = "Font {}"
 
-data Glyph = Glyph
-  { glyIndex    :: GLint
-  , glyGlyphPtr :: GlyphPtr
-  , glyMetrics  :: GlyphMetrics
-  } deriving Show
+
 
 data TextBuffer = TextBuffer 
-  { bufSelection :: !(Int, Int)
-  , bufColumn    :: !Int
-  , bufText      :: !(Seq Char)
-  , bufPath      :: !FilePath
-  , bufFont      :: !Font
+  { bufSelection    :: !(Int, Int)
+  , bufColumn       :: !Int
+  , bufText         :: !(Seq Char)
+  , bufPath         :: !FilePath
   } deriving Show
+
+data TextMetrics = TextMetrics
+  { txmCharIndices :: ![GLint]
+  , txmCharOffsets :: ![V2 GLfloat]
+  , txmNumChars    :: !Int
+  }
+
+data TextRenderer = TextRenderer
+  { _txrFont         :: !Font
+  , _txrVAO          :: !VertexArrayObject
+  , _txrIndexBuffer  :: !ArrayBuffer
+  , _txrOffsetBuffer :: !ArrayBuffer
+  , _txrTextBuffer   :: !TextBuffer
+  , _txrTextMetrics  :: !TextMetrics
+  }
+makeLenses ''TextRenderer
