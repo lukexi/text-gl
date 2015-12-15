@@ -56,6 +56,7 @@ data TextBuffer = TextBuffer
   , bufColumn       :: !Int
   , bufText         :: !(Seq Char)
   , bufPath         :: !FilePath
+  , bufUndo         :: !(Maybe TextBuffer)
   } deriving Show
 
 data TextMetrics = TextMetrics

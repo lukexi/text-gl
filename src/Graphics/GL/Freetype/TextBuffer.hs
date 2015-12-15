@@ -30,14 +30,13 @@ newTextBuffer = TextBuffer
   , bufColumn    = 1 
   , bufText      = mempty
   , bufPath      = mempty
+  , bufUndo      = Nothing
   }
 
 textBufferFromString :: FilePath -> String -> TextBuffer
-textBufferFromString filePath string = TextBuffer
-  { bufSelection = (0,0)
-  , bufColumn    = 1
-  , bufText      = Seq.fromList string
-  , bufPath      = filePath
+textBufferFromString filePath string = newTextBuffer 
+  { bufText = Seq.fromList string
+  , bufPath = filePath 
   }
 
 stringFromTextBuffer :: TextBuffer -> String
@@ -64,17 +63,26 @@ currentColumn TextBuffer{..} =
       (start, _) = bufSelection
   in  start - previousNewline
 
+pushUndo :: TextBuffer -> TextBuffer
+pushUndo buffer = buffer { bufUndo = Just buffer }
+
+undo :: TextBuffer -> TextBuffer
+undo buffer = case bufUndo buffer of
+  Just prevBuffer -> prevBuffer
+  Nothing         -> buffer
+
 updateCurrentColumn :: TextBuffer -> TextBuffer
 updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
 
 insertTextBuffer :: Seq Char -> TextBuffer -> TextBuffer
 insertTextBuffer chars buffer@TextBuffer{..} = updateCurrentColumn $
-  buffer { bufSelection = (newCursor, newCursor), bufText = newText }
+  (pushUndo buffer) { bufSelection = (newCursor, newCursor), bufText = newText }
   where 
     newText = seqReplace (start, end) chars bufText
     newCursor = (start + Seq.length chars)
     (start, end) = bufSelection
 
+-- Undo is handled in insertTextBuffer
 insertChar :: Char -> TextBuffer -> TextBuffer
 insertChar char = insertString [char]
 
