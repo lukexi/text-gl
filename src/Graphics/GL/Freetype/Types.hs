@@ -12,9 +12,13 @@ import Control.Lens
 
 import System.IO.Unsafe
 
+-- Used by GHC in its log messages
+quoteChars :: String
+quoteChars = "‘’"
+
 -- Aka ASCII codes 32-126
 asciiChars :: String
-asciiChars = [' '..'~']
+asciiChars = quoteChars ++ [' '..'~']
 
 blockChar :: Char
 blockChar = '█'
@@ -56,6 +60,7 @@ data TextBuffer = TextBuffer
   , bufColumn       :: !Int
   , bufText         :: !(Seq Char)
   , bufPath         :: !FilePath
+  , bufUndo         :: !(Maybe TextBuffer)
   } deriving Show
 
 data TextMetrics = TextMetrics

@@ -108,7 +108,6 @@ renderText textRenderer mvp color = do
     uniformV3  uColor   color
 
     let numVertices  = 4
-        -- Add 1 to ensure we still render the cursor
         numInstances = fromIntegral txmNumChars
     withVAO rendererVAO $ 
       glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
