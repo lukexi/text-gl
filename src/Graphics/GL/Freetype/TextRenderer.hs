@@ -13,7 +13,7 @@ import Graphics.GL.Freetype.Font
 import Graphics.GL.Freetype.TextMetrics
 import Graphics.GL.Freetype.TextBuffer
 
-createTextRenderer :: Font -> TextBuffer -> IO TextRenderer
+createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
     let shader = fntShader font
     glyphVAO <- newVAO
