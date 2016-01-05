@@ -66,7 +66,7 @@ castRayToBuffer ray textRenderer model44 = do
     let textModel44  = model44 !*! correctionMatrixForFont font
         font         = textRenderer ^. txrFont
         aabb         = (0, V3 1 (-1) 0) -- Is this right??
-        rayDir       = directionFromRay ray
+        rayDir       = rayDirection ray
         intersection = rayOBBIntersection ray aabb textModel44
   
     case intersection of
