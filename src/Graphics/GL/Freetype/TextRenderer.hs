@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 module Graphics.GL.Freetype.TextRenderer where
 
 import Data.Foldable
@@ -7,6 +8,7 @@ import Graphics.GL.Pal hiding (trace)
 import Control.Lens
 
 import Control.Monad.Trans
+import Control.Monad
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.Font
@@ -59,37 +61,29 @@ updateMetrics textRenderer@TextRenderer{..} = do
 -- | This is quick and dirty.
 -- We should keep the bounding boxes of the characters during
 -- calculateIndicesAndOffsets, which we should cache in the TextBuffer.
--- We currently use the point side which is quite wrong
-
-castRayToBuffer :: MonadIO m => Ray Float -> TextRenderer -> M44 Float -> m TextRenderer
-castRayToBuffer ray textRenderer model44 = do
-    let textModel44  = model44 !*! correctionMatrixForFont font
-        font         = textRenderer ^. txrFont
-        aabb         = (0, V3 1 (-1) 0) -- Is this right??
-        rayDir       = rayDirection ray
-        intersection = rayOBBIntersection ray aabb textModel44
-  
-    case intersection of
-        Nothing -> return textRenderer
-        Just intersectionDistance -> do
-            let worldPoint = rayDir ^* intersectionDistance
-                modelPoint = worldPointToModelPoint textModel44 worldPoint
-                -- The width here is a guess; should get this from GlyphMetrics
-                -- during updateIndicesAndOffsets
-                (charW, charH) = (fntPointSize font * 0.66, fntPointSize font)
-
-                charOffsets = txmCharOffsets (textRenderer ^. txrTextMetrics)
-                (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
-                hits = filter (\(_i, V2 x y) -> 
-                               cursX > x 
-                            && cursX < (x + charW) 
-                            && cursY > y 
-                            && cursY < (y + charH)) (zip [0..] charOffsets)
-                
-            case hits of
-              [] -> return textRenderer
-              ((i, _):_) -> 
-                updateMetrics (textRenderer & txrTextBuffer %~ moveCursorTo i)
+-- We currently use the point size which is quite wrong
+castRayToTextRenderer :: MonadIO m => Ray Float -> TextRenderer -> M44 Float -> m (Maybe TextRenderer)
+castRayToTextRenderer ray textRenderer model44 = do
+    let textModel44   = model44 !*! correctionMatrixForFont font
+        font          = textRenderer ^. txrFont
+        aabb          = (0, V3 1 (-1) 0) -- Is this right??
+        rayDir        = rayDirection ray
+        mIntersection = rayOBBIntersection ray aabb textModel44
+    forM mIntersection $ \intersectionDistance -> do
+        let worldPoint       = projectRay ray intersectionDistance -- rayOrigin ray + rayDir ^* intersectionDistance
+            V3 cursX cursY _ = worldPointToModelPoint textModel44 worldPoint
+            -- The width here is a guess; should get this from GlyphMetrics
+            -- during updateIndicesAndOffsets
+            (charW, charH)   = (fntPointSize font * 0.66, fntPointSize font)
+            charOffsets      = txmCharOffsets (textRenderer ^. txrTextMetrics)
+            hits = filter (\(_i, V2 x y) -> 
+                           cursX > x 
+                        && cursX < (x + charW) 
+                        && cursY > y 
+                        && cursY < (y + charH)) (zip [0..] charOffsets)
+        case hits of
+            ((i, _):_) -> updateMetrics (textRenderer & txrTextBuffer %~ moveCursorTo i)
+            []         -> return textRenderer
 
 renderText :: (MonadIO m) 
            => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()

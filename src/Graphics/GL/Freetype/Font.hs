@@ -10,9 +10,8 @@ import Graphics.GL.Freetype.API
 import Graphics.GL.Pal
 
 import Control.Monad
-import Control.Monad.Trans
 import qualified Data.Map as Map
-import Data.Map (Map, (!))
+import Data.Map ((!))
 import Data.Foldable
 
 import Graphics.GL.Freetype.Types
