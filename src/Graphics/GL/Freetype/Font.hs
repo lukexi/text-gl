@@ -15,14 +15,14 @@ import Data.Map ((!))
 import Data.Foldable
 
 import Graphics.GL.Freetype.Types
+import Control.Monad.Trans
 
 
-
-createFont :: String -> Float -> Program -> IO Font
+createFont :: MonadIO m => String -> Float -> Program -> m Font
 createFont fontFile pointSize shader = createFontWithChars fontFile pointSize shader asciiChars
 
-createFontWithChars :: String -> Float -> Program -> String -> IO Font
-createFontWithChars fontFile pointSize shader characters = do
+createFontWithChars :: MonadIO m => String -> Float -> Program -> String -> m Font
+createFontWithChars fontFile pointSize shader characters = liftIO $ do
     let allCharacters = cursorChar:blockChar:characters
     -- Create an atlas to hold the characters
     atlas  <- newTextureAtlas 1024 1024 BitDepth1

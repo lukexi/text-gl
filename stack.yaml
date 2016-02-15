@@ -6,4 +6,4 @@ packages:
 - '../glfw-pal'
 - '../halive'
 - '../lens-extra'
-resolver: nightly-2015-12-03
+resolver: nightly-2016-02-02
