@@ -1,17 +1,21 @@
+
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
 import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
 import Graphics.GL.Freetype
+import Graphics.GL.TextBuffer
 
-import Control.Monad
--- import System.Random
+import Control.Monad.State
+import Control.Lens.Extra
+import System.Random
 import Halive.Utils
 
 -------------------------------------------------------------
 -- A test to make sure font rendering works
 -------------------------------------------------------------
 
-main :: IO a
+main :: IO ()
 main = do
 
     (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
@@ -24,13 +28,17 @@ main = do
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
     glGetErrors
-    forever $ 
-        mainLoop win events font 
+
+    let frameChars = asciiChars ++ ['\n'] ++ asciiChars
+    textRenderer <- createTextRenderer font (textBufferFromString "" frameChars)
+
+    void . flip runStateT textRenderer . whileWindow win $ 
+        mainLoop win events 
 
 
-mainLoop :: Window -> Events -> Font -> IO ()
-mainLoop win events font = do
-    glGetErrors
+mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> m ()
+mainLoop win events = do
+    --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
     processEvents events $ closeOnEscape win
 
@@ -43,16 +51,21 @@ mainLoop win events font = do
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
     -- Create our model view projection matrix
-    let model44      = mkTransformation 1 (V3 (-1) 0 (-4))
-        view44       = lookAt (V3 0 2 0) (V3 0 0 (-4)) (V3 0 1 0)
+    let textPos      = V3 0 0 (-1)
+        model44      = mkTransformation 1 textPos
+        view44       = lookAt (V3 0 0 0) textPos (V3 0 1 0)
         mvp          = projection44 !*! view44 !*! model44
 
     -- Render random characters
-    -- frameChars <- replicateM 10 $ randomRIO (' ','~')
-    let frameChars = asciiChars ++ ['\n'] ++ asciiChars
-        textBuffer = textBufferFromString font "" frameChars
-    updateIndicesAndOffsets textBuffer
-    renderText font frameChars (-1,3) mvp
+    n <- liftIO $ randomRIO (1,50)
+    frameChars <- liftIO $ fmap concat $ replicateM n $ do
+        line <- replicateM 50 $ randomRIO (' ','~')
+        return $ line ++ ['\n']
+
+    txrTextBuffer .= textBufferFromString "" frameChars
+    put =<< updateMetrics =<< get
+    textRenderer <- use id
+    renderText textRenderer mvp (V3 1 1 1)
     
     swapBuffers win
 

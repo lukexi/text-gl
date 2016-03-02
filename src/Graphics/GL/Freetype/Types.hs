@@ -1,14 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 module Graphics.GL.Freetype.Types where
 
 import Graphics.GL.Pal
-
-import Data.Map (Map)
-import Data.Sequence (Seq)
-
 import Graphics.GL.Freetype.API
-import Control.Lens
 
 import System.IO.Unsafe
 
@@ -25,6 +19,7 @@ blockChar = '█'
 
 cursorChar :: Char
 cursorChar = '▏'
+
 
 data Glyph = Glyph
   { glyIndex    :: !GLint
@@ -52,29 +47,3 @@ data Font = Font
   }
 instance Show Font where
   show _ = "Font {}"
-
-
-
-data TextBuffer = TextBuffer 
-  { bufSelection    :: !(Int, Int)
-  , bufColumn       :: !Int
-  , bufText         :: !(Seq Char)
-  , bufPath         :: !FilePath
-  , bufUndo         :: !(Maybe TextBuffer)
-  } deriving Show
-
-data TextMetrics = TextMetrics
-  { txmCharIndices :: ![GLint]
-  , txmCharOffsets :: ![V2 GLfloat]
-  , txmNumChars    :: !Int
-  }
-
-data TextRenderer = TextRenderer
-  { _txrFont         :: !Font
-  , _txrVAO          :: !VertexArrayObject
-  , _txrIndexBuffer  :: !ArrayBuffer
-  , _txrOffsetBuffer :: !ArrayBuffer
-  , _txrTextBuffer   :: !TextBuffer
-  , _txrTextMetrics  :: !TextMetrics
-  }
-makeLenses ''TextRenderer

@@ -52,27 +52,7 @@ mainLoop win events = do
     processEvents events $ \e -> do
         closeOnEscape win e
 
-        superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
-        shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
-        if 
-            | superIsDown ->
-                onKeyDown e Key'S $ do
-                    liftIO $ putStrLn "Saving..."
-                    bufferString <- stringFromTextBuffer <$> use txrTextBuffer 
-                    liftIO $ writeFile "test/TestBuffer.hs" bufferString
-            | shiftIsDown -> do
-                onKey e Key'Left      $ txrTextBuffer %= selectLeft
-                onKey e Key'Right     $ txrTextBuffer %= selectRight
-            | otherwise -> do
-                onChar e     $ \char -> txrTextBuffer %= insertChar char
-                onKey e Key'Backspace $ txrTextBuffer %= backspace
-                onKey e Key'Enter     $ txrTextBuffer %= insertChar '\n'
-                onKey e Key'Left      $ txrTextBuffer %= moveLeft
-                onKey e Key'Right     $ txrTextBuffer %= moveRight
-                onKey e Key'Down      $ txrTextBuffer %= moveDown
-                onKey e Key'Up        $ txrTextBuffer %= moveUp
-        
-        put =<< updateMetrics =<< get
+        handleTextBufferEvent win e id
 
     immutably $ do
         -- Clear the framebuffer

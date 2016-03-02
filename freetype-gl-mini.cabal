@@ -22,13 +22,16 @@ library
     Graphics.GL.Freetype.API
     Graphics.GL.Freetype.Font
     Graphics.GL.Freetype.Types
-    Graphics.GL.Freetype.TextBuffer
-    Graphics.GL.Freetype.TextRenderer
-    Graphics.GL.Freetype.TextMetrics
+    Graphics.GL.TextBuffer
+    Graphics.GL.TextBuffer.Input
+    Graphics.GL.TextBuffer.Metrics
+    Graphics.GL.TextBuffer.Render
+    Graphics.GL.TextBuffer.TextBuffer
+    Graphics.GL.TextBuffer.Types
   -- other-modules:       
   -- other-extensions:    
   build-depends:       
-    base >=4.8 && <4.9, gl, linear, gl-pal, containers, mtl, random, lens
+    base >=4.8 && <4.9, gl, linear, gl-pal, glfw-pal, containers, mtl, random, lens-extra
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-prof-options:    -Wall -O2 -fprof-auto
@@ -62,7 +65,7 @@ test-suite basic
     gl,
     gl-pal,
     mtl,
-    bytestring, text, linear, time, random, glfw-pal, halive
+    bytestring, text, linear, time, random, glfw-pal, halive, lens-extra
 
 test-suite buffer
   main-is:             TestBuffer.hs
