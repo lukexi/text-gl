@@ -26,7 +26,7 @@ seqRange (start, end) = Seq.drop start . Seq.take end
 -- so the initial column becomes 1
 newTextBuffer :: TextBuffer
 newTextBuffer = TextBuffer 
-  { bufSelection = (0,0)
+  { bufSelection = Nothing -- (0,0)
   , bufColumn    = 1 
   , bufText      = mempty
   , bufPath      = mempty
@@ -43,7 +43,9 @@ stringFromTextBuffer :: TextBuffer -> String
 stringFromTextBuffer = toList . bufText
 
 selectionFromTextBuffer :: TextBuffer -> String
-selectionFromTextBuffer TextBuffer{..} = toList (seqRange bufSelection bufText)
+selectionFromTextBuffer TextBuffer{..} = case bufSelection of 
+  Just selection -> toList (seqRange selection bufText)
+  Nothing -> ""
 
 -- | Returns the number of lines and the number of columns in the longest line
 measureText :: Seq Char -> (Int, Int)
@@ -58,9 +60,9 @@ measureText text =
 -- | Find the column in the current line
 -- (in other words, the distance from the previous newline)
 currentColumn :: TextBuffer -> Int
-currentColumn TextBuffer{..} =
-  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ bufText
-      (start, _) = bufSelection
+currentColumn buffer =
+  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ bufText buffer
+      (start, _) = getSelection buffer
   in  start - previousNewline
 
 pushUndo :: TextBuffer -> TextBuffer
@@ -75,12 +77,12 @@ updateCurrentColumn :: TextBuffer -> TextBuffer
 updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
 
 insertTextBuffer :: Seq Char -> TextBuffer -> TextBuffer
-insertTextBuffer chars buffer@TextBuffer{..} = updateCurrentColumn $
-  (pushUndo buffer) { bufSelection = (newCursor, newCursor), bufText = newText }
+insertTextBuffer chars buffer = updateCurrentColumn $
+  (pushUndo buffer) { bufSelection = Just (newCursor, newCursor), bufText = newText }
   where 
-    newText = seqReplace (start, end) chars bufText
+    newText = seqReplace (start, end) chars (bufText buffer)
     newCursor = (start + Seq.length chars)
-    (start, end) = bufSelection
+    (start, end) = getSelection buffer
 
 -- Undo is handled in insertTextBuffer
 insertChar :: Char -> TextBuffer -> TextBuffer
@@ -93,12 +95,12 @@ insert :: Seq Char -> TextBuffer -> TextBuffer
 insert chars = insertTextBuffer chars
 
 moveCursorTo :: Int -> TextBuffer -> TextBuffer
-moveCursorTo i buffer = updateCurrentColumn $ buffer { bufSelection = (i, i) }
+moveCursorTo i buffer = updateCurrentColumn $ buffer { bufSelection = Just (i, i) }
 
 moveLeft :: TextBuffer -> TextBuffer
 moveLeft buffer = go selection
   where
-    selection        = bufSelection buffer
+    selection        = getSelection buffer
     go (0, 0)        = buffer
     go (start, end)
       | start == end = moveCursorTo (start - 1) buffer
@@ -107,34 +109,34 @@ moveLeft buffer = go selection
 selectLeft :: TextBuffer -> TextBuffer
 selectLeft buffer = updateCurrentColumn (go selection)
   where
-    selection       = bufSelection buffer
+    selection       = getSelection buffer
     go (0,       _) = buffer
-    go (start, end) = buffer { bufSelection = (start - 1, end) }
+    go (start, end) = buffer { bufSelection = Just (start - 1, end) }
 
 moveRight :: TextBuffer -> TextBuffer
 moveRight buffer = updateCurrentColumn (go selection)
   where
-    selection = bufSelection buffer
+    selection = getSelection buffer
     go (start, end)
       | end == Seq.length (bufText buffer) = buffer
-      | start == end                       = buffer { bufSelection = (end + 1, end + 1) }
-    go (_, end)                            = buffer { bufSelection = (end, end) }
+      | start == end                       = buffer { bufSelection = Just (end + 1, end + 1) }
+    go (_, end)                            = buffer { bufSelection = Just (end, end) }
 
 
 selectRight :: TextBuffer -> TextBuffer
 selectRight buffer = updateCurrentColumn (go selection)
   where
-    selection = bufSelection buffer
+    selection = getSelection buffer
     go (_, end)
       | end == Seq.length (bufText buffer) = buffer
-    go (start, end)                        = buffer { bufSelection = (start, end + 1) }
+    go (start, end)                        = buffer { bufSelection = Just (start, end + 1) }
 
 selectAll :: TextBuffer -> TextBuffer
-selectAll buffer = updateCurrentColumn $ buffer { bufSelection = (0, length (bufText buffer)) }
+selectAll buffer = updateCurrentColumn $ buffer { bufSelection = Just (0, length (bufText buffer)) }
 
 backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
-  let (start, end) = bufSelection buffer
+  let (start, end) = getSelection buffer
   in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
 
 moveToEnd :: TextBuffer -> TextBuffer
@@ -147,7 +149,7 @@ moveToBeginning = moveCursorTo 0
 
 moveDown :: TextBuffer -> TextBuffer
 moveDown buffer = 
-  let (cursorLocation, _)     = bufSelection buffer
+  let (cursorLocation, _)     = getSelection buffer
       lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
   -- If there's no newline beyond the cursor, do nothing
   in case findIndex (>= cursorLocation) lineLocations of
@@ -159,14 +161,14 @@ moveDown buffer =
             -- Don't jump futher than the next newline location
             newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
         -- Don't use moveCursorTo here since we don't want to update the column
-        in buffer { bufSelection = (newCursor, newCursor) }
+        in buffer { bufSelection = Just (newCursor, newCursor) }
 
 
 -- We still update the current column for the case
 -- where we press up on the first line and return to column 0
 moveUp :: TextBuffer -> TextBuffer
 moveUp buffer = 
-  let (cursorLocation, _)     = bufSelection buffer
+  let (cursorLocation, _)     = getSelection buffer
       -- Add artificial 'newlines' at the beginning of the document to simplify the algorithm
       lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
   -- If there's no newline beyond the cursor, do nothing
@@ -180,9 +182,9 @@ moveUp buffer =
             newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
             -- Update the column iff we have hit up enough times to return to the beginning of the text
             newColumn = if newCursor == 1 then 1 else bufColumn buffer
-        in buffer { bufSelection = (newCursor, newCursor), bufColumn = newColumn }
+        in buffer { bufSelection = Just (newCursor, newCursor), bufColumn = newColumn }
 
-
+getSelection buffer = fromMaybe (0,0) (bufSelection buffer)
 
 -- main = do
 --   flip runStateT newTextBuffer $ do

@@ -64,6 +64,7 @@ mainLoop win events = do
 
     txrTextBuffer .= textBufferFromString "" frameChars
     put =<< updateMetrics =<< get
+    
     textRenderer <- use id
     renderText textRenderer mvp (V3 1 1 1)
     

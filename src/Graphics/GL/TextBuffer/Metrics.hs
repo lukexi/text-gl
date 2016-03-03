@@ -18,7 +18,6 @@ calculateMetrics TextBuffer{..} Font{..} =
       cursorGlyph        = glyphForChar cursorChar
       glyphForChar       = fntGlyphForChar
       pointSize          = fntPointSize
-      (selStart, selEnd) = bufSelection
       renderChar (charNum, lineNum, lastXOffset, maybeLastChar, indicesF, offsetsF) character = 
             -- Render newlines as spaces
         let glyph   = glyphForChar (if character == '\n' then ' ' else character)
@@ -31,16 +30,19 @@ calculateMetrics TextBuffer{..} Font{..} =
             charXOffset = lastXOffset + kerning
             nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
             charOffset  = V2 charXOffset charYOffset
-            (newIndices, newOffsets) 
-              | charNum == selStart && charNum == selEnd =
-                let indices' = glyIndex cursorGlyph : glyIndex glyph : indicesF :: [GLint]
-                    offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indices', offsets')
-              | charNum >= selStart && charNum < selEnd = 
-                let indices' = glyIndex blockGlyph : glyIndex glyph : indicesF :: [GLint]
-                    offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
-                in (indices', offsets')
-              | otherwise =
+            (newIndices, newOffsets) = case bufSelection of
+              Just (selStart, selEnd)
+                -- Add a cursor when charNum==selStart==selEnd
+                | charNum == selStart && charNum == selEnd ->
+                  let indices' = glyIndex cursorGlyph : glyIndex glyph : indicesF :: [GLint]
+                      offsets' = charOffset           : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indices', offsets')
+                -- Add a selection block selStart<=charNum<selEnd
+                | charNum >= selStart && charNum < selEnd ->
+                  let indices' = glyIndex blockGlyph : glyIndex glyph : indicesF :: [GLint]
+                      offsets' = charOffset          : charOffset     : offsetsF :: [V2 GLfloat]
+                  in (indices', offsets')
+              _ ->
                 let indices' = glyIndex glyph : indicesF :: [GLint]
                     offsets' = charOffset     : offsetsF :: [V2 GLfloat]
                 in (indices', offsets')
