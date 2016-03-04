@@ -14,7 +14,7 @@ data TextBuffer = TextBuffer
   { bufSelection    :: !(Maybe (Int, Int))
   , bufColumn       :: !Int
   , bufText         :: !(Seq Char)
-  , bufPath         :: !FilePath
+  , bufPath         :: !(Maybe FilePath)
   , bufUndo         :: !(Maybe TextBuffer)
   } deriving Show
 

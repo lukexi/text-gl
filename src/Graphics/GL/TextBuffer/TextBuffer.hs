@@ -26,36 +26,41 @@ seqRange (start, end) = Seq.drop start . Seq.take end
 -- so the initial column becomes 1
 newTextBuffer :: TextBuffer
 newTextBuffer = TextBuffer 
-  { bufSelection = Nothing -- (0,0)
-  , bufColumn    = 1 
-  , bufText      = mempty
-  , bufPath      = mempty
-  , bufUndo      = Nothing
-  }
+    { bufSelection = Nothing
+    , bufColumn    = 1 
+    , bufText      = mempty
+    , bufPath      = Nothing
+    , bufUndo      = Nothing
+    }
 
-textBufferFromString :: FilePath -> String -> TextBuffer
-textBufferFromString filePath string = newTextBuffer 
-  { bufText = Seq.fromList string
-  , bufPath = filePath 
-  }
+textBufferWithPath :: FilePath -> String -> TextBuffer
+textBufferWithPath filePath string = newTextBuffer 
+    { bufText = Seq.fromList string
+    , bufPath = Just filePath 
+    }
+
+textBufferFromString :: String -> TextBuffer
+textBufferFromString string = newTextBuffer 
+    { bufText = Seq.fromList string
+    }
 
 stringFromTextBuffer :: TextBuffer -> String
 stringFromTextBuffer = toList . bufText
 
 selectionFromTextBuffer :: TextBuffer -> String
 selectionFromTextBuffer TextBuffer{..} = case bufSelection of 
-  Just selection -> toList (seqRange selection bufText)
-  Nothing -> ""
+    Just selection -> toList (seqRange selection bufText)
+    Nothing -> ""
 
 -- | Returns the number of lines and the number of columns in the longest line
 measureText :: Seq Char -> (Int, Int)
 measureText text = 
-  let lineIndices = Seq.elemIndicesL '\n' text
-      numLines = length lineIndices + 1
-      numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
-        (max maxCol (thisIndex - lastIndex), thisIndex)) 
-        (0,0) lineIndices
-  in (numColumns, numLines)
+    let lineIndices = Seq.elemIndicesL '\n' text
+        numLines = length lineIndices + 1
+        numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
+          (max maxCol (thisIndex - lastIndex), thisIndex)) 
+          (0,0) lineIndices
+    in (numColumns, numLines)
 
 -- | Find the column in the current line
 -- (in other words, the distance from the previous newline)
@@ -136,55 +141,68 @@ selectAll buffer = updateCurrentColumn $ buffer { bufSelection = Just (0, length
 
 backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
-  let (start, end) = getSelection buffer
-  in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
+    let (start, end) = getSelection buffer
+    in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
 
 moveToEnd :: TextBuffer -> TextBuffer
 moveToEnd buffer = 
-  let end = Seq.length (bufText buffer)
-  in moveCursorTo end buffer
+    let end = Seq.length (bufText buffer)
+    in moveCursorTo end buffer
 
 moveToBeginning :: TextBuffer -> TextBuffer
 moveToBeginning = moveCursorTo 0
 
 moveDown :: TextBuffer -> TextBuffer
 moveDown buffer = 
-  let (cursorLocation, _)     = getSelection buffer
-      lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
-  -- If there's no newline beyond the cursor, do nothing
-  in case findIndex (>= cursorLocation) lineLocations of
-      Nothing -> buffer
-      Just nextLineIndex -> 
-        let nextLineLocation        = lineLocations !! nextLineIndex
-            nextNextLineLocation    = lineLocations !! (min (length lineLocations - 1) $ nextLineIndex + 1)
-            currentDistanceFromLeft = bufColumn buffer
-            -- Don't jump futher than the next newline location
-            newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
-        -- Don't use moveCursorTo here since we don't want to update the column
-        in buffer { bufSelection = Just (newCursor, newCursor) }
+    let (cursorLocation, _)     = getSelection buffer
+        lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
+    -- If there's no newline beyond the cursor, do nothing
+    in case findIndex (>= cursorLocation) lineLocations of
+        Nothing -> buffer
+        Just nextLineIndex -> 
+            let nextLineLocation        = lineLocations !! nextLineIndex
+                nextNextLineLocation    = lineLocations !! (min (length lineLocations - 1) $ nextLineIndex + 1)
+                currentDistanceFromLeft = bufColumn buffer
+                -- Don't jump futher than the next newline location
+                newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
+            -- Don't use moveCursorTo here since we don't want to update the column
+            in buffer { bufSelection = Just (newCursor, newCursor) }
 
 
 -- We still update the current column for the case
 -- where we press up on the first line and return to column 0
 moveUp :: TextBuffer -> TextBuffer
 moveUp buffer = 
-  let (cursorLocation, _)     = getSelection buffer
-      -- Add artificial 'newlines' at the beginning of the document to simplify the algorithm
-      lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
-  -- If there's no newline beyond the cursor, do nothing
-  in case findIndex (>= cursorLocation) lineLocations of
-      Nothing -> buffer
-      Just nextLineIndex -> 
-        let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
-            prevLineLocation        = lineLocations !! (nextLineIndex - 2)
-            currentDistanceFromLeft = bufColumn buffer
-            -- Don't jump futher than the prev newline location
-            newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
-            -- Update the column iff we have hit up enough times to return to the beginning of the text
-            newColumn = if newCursor == 1 then 1 else bufColumn buffer
-        in buffer { bufSelection = Just (newCursor, newCursor), bufColumn = newColumn }
+    let (cursorLocation, _)     = getSelection buffer
+        -- Add artificial 'newlines' at the beginning of the document to simplify the algorithm
+        lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
+    -- If there's no newline beyond the cursor, do nothing
+    in case findIndex (>= cursorLocation) lineLocations of
+        Nothing -> buffer
+        Just nextLineIndex -> 
+            let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
+                prevLineLocation        = lineLocations !! (nextLineIndex - 2)
+                currentDistanceFromLeft = bufColumn buffer
+                -- Don't jump futher than the prev newline location
+                newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
+                -- Update the column iff we have hit up enough times to return to the beginning of the text
+                newColumn = if newCursor == 1 then 1 else bufColumn buffer
+            in buffer { bufSelection = Just (newCursor, newCursor), bufColumn = newColumn }
 
+getSelection :: TextBuffer -> (Int, Int)
 getSelection buffer = fromMaybe (0,0) (bufSelection buffer)
+
+-- currentIndentation buffer = 
+--     let (cursorLocation, _) = getSelection buffer
+--         (leftOfCursor, _) = splitAt cursorLocation (bufText buffer)
+
+-- getCurrentLine buffer = 
+--     let (cursorLocation, _)     = getSelection buffer
+--         (leftOfCursor, rightOfCursor) = Seq.splitAt cursorLocation buffer
+--         (newlineLeft, newlineRight) = (Seq.elemIndexR '\n' leftOfCursor, 
+--                                        (Seq.length leftOfCursor +) <$> Seq.elemIndexL '\n' rightOfCursor)
+    
+
 
 -- main = do
 --   flip runStateT newTextBuffer $ do

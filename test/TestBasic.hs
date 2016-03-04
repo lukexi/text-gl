@@ -30,7 +30,7 @@ main = do
     glGetErrors
 
     let frameChars = asciiChars ++ ['\n'] ++ asciiChars
-    textRenderer <- createTextRenderer font (textBufferFromString "" frameChars)
+    textRenderer <- createTextRenderer font (textBufferFromString frameChars)
 
     void . flip runStateT textRenderer . whileWindow win $ 
         mainLoop win events 
@@ -62,7 +62,7 @@ mainLoop win events = do
         line <- replicateM 50 $ randomRIO (' ','~')
         return $ line ++ ['\n']
 
-    txrTextBuffer .= textBufferFromString "" frameChars
+    txrTextBuffer .= textBufferFromString frameChars
     put =<< updateMetrics =<< get
     
     textRenderer <- use id

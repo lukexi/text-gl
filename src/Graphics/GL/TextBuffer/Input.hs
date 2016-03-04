@@ -28,12 +28,14 @@ isBackspaceChar = (== 8) . ord
 textRendererFromFile :: MonadIO m => Font -> FilePath -> m TextRenderer
 textRendererFromFile font filePath = liftIO $ do
     text <- readFile filePath
-    createTextRenderer font (textBufferFromString filePath text)
+    createTextRenderer font (textBufferWithPath filePath text)
 
-saveTextBuffer :: (MonadIO m) => TextBuffer -> m ()
-saveTextBuffer buffer = do
-    liftIO $ putStrLn $ "Saving " ++ bufPath buffer ++ "..."
-    liftIO $ writeFile (bufPath buffer) (stringFromTextBuffer buffer)
+saveTextBuffer :: MonadIO m => TextBuffer -> m ()
+saveTextBuffer buffer = liftIO $ case bufPath buffer of
+    Nothing -> putStrLn "Tried to save text buffer with no path"
+    Just bufferPath -> do
+        putStrLn $ "Saving " ++ bufferPath ++ "..."
+        writeFile bufferPath (stringFromTextBuffer buffer)
 
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
                       => Window -> Event -> (Traversal' s TextRenderer) -> m ()

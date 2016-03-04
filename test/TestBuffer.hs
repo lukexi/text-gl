@@ -7,6 +7,7 @@ import Graphics.GL
 import Graphics.GL.Pal
 import Graphics.UI.GLFW.Pal
 import Graphics.GL.Freetype
+import Graphics.GL.TextBuffer
 
 import Control.Lens.Extra
 import Control.Monad
@@ -35,8 +36,9 @@ main = do
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    text <- readFile "test/TestBuffer.hs"
-    initialState <- createTextRenderer font $ textBufferFromString "test/TestBuffer.hs" text
+    -- let fileName = "test/TestBuffer.hs"
+    let fileName = "test/TODO.txt"
+    initialState <- textRendererFromFile font fileName
     void . flip runStateT initialState . whileWindow win $ 
         mainLoop win events
 
@@ -48,20 +50,28 @@ mainLoop win events = do
     projection44 <- getWindowProjection win 45 0.01 1000
     -- glGetErrors
 
+    let model44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-1) (1) (-3))
+        view44  = viewMatrixFromPose newPose
+        mvp     = projection44 !*! view44 !*! model44
+
     -- Get mouse/keyboard/OS events from GLFW
     processEvents events $ \e -> do
         closeOnEscape win e
 
         handleTextBufferEvent win e id
+        onMouseDown e $ \_ -> do
+            ray <- cursorPosToWorldRay win projection44 newPose
+            textRenderer <- get
+            mUpdatedTextRenderer <- castRayToTextRenderer ray textRenderer model44
+            forM_ mUpdatedTextRenderer put
 
     immutably $ do
         -- Clear the framebuffer
         glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
         -- Render our scene
-        let view44       = viewMatrixFromPose newPose
-            model44      = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-2) (1) (-4))
-            mvp          = projection44 !*! view44 !*! model44
+        
+            
 
         textRenderer <- get
         renderText textRenderer mvp (V3 1 1 1)
