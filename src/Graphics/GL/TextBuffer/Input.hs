@@ -38,8 +38,10 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
         writeFile bufferPath (stringFromTextBuffer buffer)
 
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
-                      => Window -> Event -> (Traversal' s TextRenderer) -> m ()
+                      => Window -> Event -> Traversal' s TextRenderer -> m ()
 handleTextBufferEvent win e rendererLens = do
+    let textBufferLens :: Traversal' s TextBuffer
+        textBufferLens = rendererLens . txrTextBuffer
     -- let bufferLens = rendererLens . txrTextBuffer :: (Traversal' s TextBuffer)
     superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
     -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
