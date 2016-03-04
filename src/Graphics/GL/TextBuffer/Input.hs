@@ -80,13 +80,14 @@ handleTextBufferEvent win e rendererLens = do
 
     -- Continuously save the file
     let updateBuffer save = do
-          maybeRenderer <- preuse rendererLens
+            maybeRenderer <- preuse rendererLens
+            forM_ maybeRenderer $ \renderer -> do
+                newRenderer <- updateMetrics renderer
+                rendererLens .= newRenderer
+                when save $ saveTextBuffer (newRenderer ^. txrTextBuffer)
+            -- buf <- preuse (rendererLens . txrTextBuffer)
+            -- liftIO . print $ join $ bufSelection <$> buf
 
-          forM_ maybeRenderer $ \renderer -> do 
-
-            newRenderer <- updateMetrics renderer
-            rendererLens .= newRenderer
-            when save $ saveTextBuffer (newRenderer ^. txrTextBuffer)
     onChar e                          $ \_ -> updateBuffer True
     onKey  e Key'Enter                      $ updateBuffer True
     onKey  e Key'Backspace                  $ updateBuffer True
@@ -101,3 +102,5 @@ handleTextBufferEvent win e rendererLens = do
     onKeyWithMods e [ModKeySuper] Key'Z     $ updateBuffer True
     onKeyWithMods e [ModKeySuper] Key'V     $ updateBuffer True
     onKeyWithMods e [ModKeySuper] Key'X     $ updateBuffer True
+
+    

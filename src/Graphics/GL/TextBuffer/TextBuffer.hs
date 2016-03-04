@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE MultiWayIf #-}
 module Graphics.GL.TextBuffer.TextBuffer where
 
 import qualified Data.Sequence as Seq
@@ -28,10 +29,12 @@ cursorWithin (Cursor lineNum colNum)
              sel@(Cursor startLineNum startColNum, Cursor endLineNum endColNum) = 
     not (isZeroWidth sel) &&
     (lineNum >= startLineNum && lineNum <= endLineNum) &&
-        ((lineNum /= startLineNum && lineNum /= endLineNum) ||
-         (lineNum == startLineNum && colNum >= startColNum) ||
-         (lineNum == endLineNum   && colNum < endColNum)
-        )
+    if
+        | lineNum == startLineNum && lineNum == endLineNum ->
+            colNum >= startColNum && colNum < endColNum
+        | lineNum == startLineNum -> colNum >= startColNum
+        | lineNum == endLineNum   -> colNum < endColNum
+        | otherwise -> True
 
 seqHead :: Seq a -> Maybe a
 seqHead seqn = case Seq.viewl seqn of
