@@ -12,6 +12,12 @@ import Data.List hiding (insert)
 import Data.Maybe
 import Graphics.GL.TextBuffer.Types
 
+
+zeroWidth :: Selection -> Maybe Cursor
+zeroWidth (start, end)
+    | start == end = Just start
+    | otherwise = Nothing
+
 cursorEqual :: Cursor -> Selection -> Bool
 cursorEqual cursor (selectionStart, selectionEnd) = cursor == selectionStart && cursor == selectionEnd
 
