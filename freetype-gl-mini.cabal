@@ -27,7 +27,6 @@ library
     Graphics.GL.TextBuffer.Metrics
     Graphics.GL.TextBuffer.Render
     Graphics.GL.TextBuffer.TextBuffer
-    Graphics.GL.TextBuffer.TextBuffer2
     Graphics.GL.TextBuffer.Types
   -- other-modules:       
   -- other-extensions:    

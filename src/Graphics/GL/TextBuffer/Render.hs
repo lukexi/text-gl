@@ -56,7 +56,7 @@ updateMetrics :: MonadIO m => TextRenderer -> m TextRenderer
 updateMetrics textRenderer@TextRenderer{..} = do
     let textMetrics@TextMetrics{..} = calculateMetrics _txrTextBuffer _txrFont
     bufferSubData _txrIndexBuffer  txmCharIndices
-    bufferSubData _txrOffsetBuffer (concatMap toList txmCharOffsets)
+    bufferSubData _txrOffsetBuffer (concatMap (toList . snd) txmCharOffsets)
     return textRenderer { _txrTextMetrics = textMetrics }
 
 -- | This is quick and dirty.
@@ -80,9 +80,10 @@ castRayToTextRenderer ray textRenderer model44 = do
                            cursX > x 
                         && cursX < (x + charW) 
                         && cursY > y 
-                        && cursY < (y + charH)) (zip [0..] charOffsets)
+                        && cursY < (y + charH)) 
+                    charOffsets
         case hits of
-            ((i, _):_) -> updateMetrics (textRenderer & txrTextBuffer %~ moveCursorTo i)
+            ((i, _):_) -> updateMetrics (textRenderer & txrTextBuffer %~ moveTo i)
             []         -> return textRenderer
 
 renderText :: (MonadIO m) 

@@ -10,17 +10,23 @@ import Control.Lens.Extra
 
 import Graphics.GL.Freetype.Types
 
+type TextSeq = Seq (Seq Char)
+type ColNum = Int
+type LineNum = Int
+data Cursor = Cursor LineNum ColNum deriving (Eq, Show)
+type Selection = (Cursor, Cursor)
+
 data TextBuffer = TextBuffer 
-  { bufSelection    :: !(Maybe (Int, Int))
+  { bufSelection    :: !(Maybe Selection)
   , bufColumn       :: !Int
-  , bufText         :: !(Seq Char)
+  , bufText         :: !TextSeq
   , bufPath         :: !(Maybe FilePath)
   , bufUndo         :: !(Maybe TextBuffer)
   } deriving Show
 
 data TextMetrics = TextMetrics
   { txmCharIndices :: ![GLint]
-  , txmCharOffsets :: ![V2 GLfloat]
+  , txmCharOffsets :: ![(Cursor, V2 GLfloat)]
   , txmNumChars    :: !Int
   }
 

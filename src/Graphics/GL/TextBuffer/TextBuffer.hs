@@ -5,29 +5,53 @@
 module Graphics.GL.TextBuffer.TextBuffer where
 
 import qualified Data.Sequence as Seq
-import Data.Sequence (Seq)
+import Data.Sequence (Seq, ViewL(..), ViewR(..))
 import Data.Monoid
 import Data.Foldable
-import Data.List (findIndex)
+import Data.List hiding (insert)
 import Data.Maybe
-
 import Graphics.GL.TextBuffer.Types
 
-seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
-seqReplace (start, end) xs original = left <> xs <> right
-  where
-    left  = Seq.take start original
-    right = Seq.drop end original
+cursorEqual :: Cursor -> Selection -> Bool
+cursorEqual cursor (selectionStart, selectionEnd) = cursor == selectionStart && cursor == selectionEnd
+
+cursorWithin :: Cursor -> Selection -> Bool
+cursorWithin (Cursor lineNum colNum) (Cursor startLineNum startColNum, Cursor endLineNum endColNum) =  
+    lineNum >= startLineNum && lineNum <= endLineNum &&
+    colNum >= startColNum   && colNum < endColNum
+
+seqHead :: Seq a -> Maybe a
+seqHead seqn = case Seq.viewl seqn of
+    a :< _ -> Just a
+    _ -> Nothing
+
+seqLast :: Seq a -> Maybe a
+seqLast seqn = case Seq.viewr seqn of
+    _ :> a -> Just a
+    _ -> Nothing
 
 seqRange :: (Int, Int) -> Seq a -> Seq a
 seqRange (start, end) = Seq.drop start . Seq.take end
 
--- we insert an invisible '\n' to act as the beginning of the text, 
--- so the initial column becomes 1
+textSeqFromString :: String -> TextSeq
+textSeqFromString = Seq.fromList . fmap Seq.fromList . lines . fixup
+    -- Fix lines returning [] instead of [""] for an empty string
+    where fixup "" = "\n"
+          fixup other = other
+
+-- | `unlines` adds an unwanted trailing \n
+stringFromTextSeq :: TextSeq -> String
+stringFromTextSeq = concat . intersperse "\n" . toList . fmap toList
+
+textSeqDimensions :: TextSeq -> (Int, Int)
+textSeqDimensions textSeq = (maximum (length <$> textSeq), length textSeq)
+
+
+
 newTextBuffer :: TextBuffer
 newTextBuffer = TextBuffer 
     { bufSelection = Nothing
-    , bufColumn    = 1 
+    , bufColumn    = 1
     , bufText      = mempty
     , bufPath      = Nothing
     , bufUndo      = Nothing
@@ -35,185 +59,223 @@ newTextBuffer = TextBuffer
 
 textBufferWithPath :: FilePath -> String -> TextBuffer
 textBufferWithPath filePath string = newTextBuffer 
-    { bufText = Seq.fromList string
+    { bufText = textSeqFromString string
     , bufPath = Just filePath 
     }
 
 textBufferFromString :: String -> TextBuffer
 textBufferFromString string = newTextBuffer 
-    { bufText = Seq.fromList string
+    { bufText = textSeqFromString string
     }
 
+
 stringFromTextBuffer :: TextBuffer -> String
-stringFromTextBuffer = toList . bufText
+stringFromTextBuffer = stringFromTextSeq . bufText
+
+getSelection :: TextBuffer -> Selection
+getSelection buffer = fromMaybe (Cursor 0 0, Cursor 0 0) (bufSelection buffer)
+
+selectionFromTextSeq :: TextSeq -> Selection -> String
+selectionFromTextSeq textSeq
+                     (Cursor startLineNum startColNum, 
+                      Cursor endLineNum endColNum) = 
+    let selectedLines = seqRange (startLineNum, endLineNum + 1) textSeq
+        trimmedLines  = Seq.adjust (Seq.drop startColNum) 0
+                      . Seq.adjust (Seq.take endColNum)   (length selectedLines - 1)
+                      $ selectedLines
+    in stringFromTextSeq trimmedLines
 
 selectionFromTextBuffer :: TextBuffer -> String
-selectionFromTextBuffer TextBuffer{..} = case bufSelection of 
-    Just selection -> toList (seqRange selection bufText)
-    Nothing -> ""
+selectionFromTextBuffer TextBuffer{..} = fromMaybe "" $ selectionFromTextSeq bufText <$> bufSelection
 
--- | Returns the number of lines and the number of columns in the longest line
-measureText :: Seq Char -> (Int, Int)
-measureText text = 
-    let lineIndices = Seq.elemIndicesL '\n' text
-        numLines = length lineIndices + 1
-        numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
-          (max maxCol (thisIndex - lastIndex), thisIndex)) 
-          (0,0) lineIndices
-    in (numColumns, numLines)
-
--- | Find the column in the current line
--- (in other words, the distance from the previous newline)
 currentColumn :: TextBuffer -> Int
-currentColumn buffer =
-  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ bufText buffer
-      (start, _) = getSelection buffer
-  in  start - previousNewline
+currentColumn buffer@TextBuffer{..} = startColNum
+    where (Cursor _ startColNum, _) = getSelection buffer
 
 pushUndo :: TextBuffer -> TextBuffer
 pushUndo buffer = buffer { bufUndo = Just buffer }
 
 undo :: TextBuffer -> TextBuffer
 undo buffer = case bufUndo buffer of
-  Just prevBuffer -> prevBuffer
-  Nothing         -> buffer
+    Just prevBuffer -> prevBuffer
+    Nothing         -> buffer
 
 updateCurrentColumn :: TextBuffer -> TextBuffer
 updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
 
-insertTextBuffer :: Seq Char -> TextBuffer -> TextBuffer
-insertTextBuffer chars buffer = updateCurrentColumn $
-  (pushUndo buffer) { bufSelection = Just (newCursor, newCursor), bufText = newText }
-  where 
-    newText = seqReplace (start, end) chars (bufText buffer)
-    newCursor = (start + Seq.length chars)
-    (start, end) = getSelection buffer
+insertTextSeq :: (Cursor, Cursor) -> TextSeq -> TextSeq -> TextSeq
+insertTextSeq sel textSeq origTextSeq = result
+  where
+    (Cursor startLineNum startColNum, 
+     Cursor endLineNum endColNum) = sel
+    -- All lines fully before and after the selection
+    before = Seq.take startLineNum     origTextSeq
+    after  = Seq.drop (endLineNum + 1) origTextSeq
+    -- The characters preceding and following the selection
+    -- on the line(s) of the selection
+    prefix = Seq.take startColNum  (Seq.index origTextSeq startLineNum)
+    suffix = Seq.drop endColNum    (Seq.index origTextSeq endLineNum)
+    -- Prefix and suffix the newly inserted line(s) with the aforementioned
+    -- prefix and suffix characters, and add back the 'before' and 'after' lines
+    result = before 
+        <> (Seq.adjust (prefix <>) 0 $
+            Seq.adjust (<> suffix) (length textSeq - 1) $ 
+            textSeq)
+        <> after 
 
--- Undo is handled in insertTextBuffer
+insertTextBuffer :: TextSeq -> TextBuffer -> TextBuffer
+insertTextBuffer textSeq buffer = updateCurrentColumn $ newBuffer
+    { bufText      = newText
+    , bufSelection = Just (newCursor, newCursor)
+    }
+    where
+        newBuffer = pushUndo buffer
+        newText   = insertTextSeq (getSelection buffer) textSeq (bufText buffer)
+        newCursor = Cursor newLineNum newColNum
+        newLineNum = startLineNum + (length textSeq - 1)
+        newColNum = if newLineNum == startLineNum then startColNum + lastLen else lastLen
+        lastLen = fromMaybe 0 (length <$> seqLast textSeq)
+        (Cursor startLineNum startColNum, _) = getSelection buffer
+
+
 insertChar :: Char -> TextBuffer -> TextBuffer
 insertChar char = insertString [char]
 
 insertString :: String -> TextBuffer -> TextBuffer
-insertString string = insert (Seq.fromList string)
+insertString string = insert (textSeqFromString string)
 
-insert :: Seq Char -> TextBuffer -> TextBuffer
+insert :: TextSeq -> TextBuffer -> TextBuffer
 insert chars = insertTextBuffer chars
 
-moveCursorTo :: Int -> TextBuffer -> TextBuffer
-moveCursorTo i buffer = updateCurrentColumn $ buffer { bufSelection = Just (i, i) }
+moveTo :: Cursor -> TextBuffer -> TextBuffer
+moveTo cursor buffer = updateCurrentColumn $ buffer { bufSelection = Just (cursor, cursor) }
 
 moveLeft :: TextBuffer -> TextBuffer
-moveLeft buffer = go selection
+moveLeft buffer = check selection
   where
     selection        = getSelection buffer
-    go (0, 0)        = buffer
-    go (start, end)
-      | start == end = moveCursorTo (start - 1) buffer
-    go (start, _)    = moveCursorTo start buffer
+    check (start, end)
+      | start == end = moveTo (cursorLeft start buffer) buffer
+    check (start, _) = moveTo start buffer
+
+moveDown :: TextBuffer -> TextBuffer
+moveDown buffer = check selection
+  where
+    selection        = getSelection buffer
+    check (start, end)
+      | start == end = moveTo (cursorDown start buffer) buffer
+    check (_, end) = moveTo end buffer
+
+moveUp :: TextBuffer -> TextBuffer
+moveUp buffer = check selection
+  where
+    selection        = getSelection buffer
+    check (start, end)
+      | start == end = moveTo (cursorUp start buffer) buffer
+    check (start, _) = moveTo start buffer
+
+cursorLeft :: Cursor -> TextBuffer -> Cursor
+cursorLeft (Cursor 0 0) _buffer = Cursor 0 0
+cursorLeft (Cursor l 0) buffer  = cursorToEndOfLine (l - 1) buffer
+cursorLeft (Cursor l c) _buffer = Cursor l (c - 1)
+
+cursorUp :: Cursor -> TextBuffer -> Cursor
+cursorUp (Cursor 0 0) _buffer = Cursor 0 0
+cursorUp (Cursor l c) buffer  = cursorToColumnInLine (l - 1) c buffer
+
+cursorDown :: Cursor -> TextBuffer -> Cursor
+cursorDown cursor@(Cursor l c) buffer
+  | l == maxLine = cursor
+  | otherwise    = cursorToColumnInLine (l + 1) c buffer
+  where
+    maxLine = length text - 1
+    text = bufText buffer
+
+cursorToColumnInLine l c buffer = Cursor l (min c lineLen)
+  where
+    lineLen = lineLength l (bufText buffer)
+
+cursorToEndOfLine :: LineNum -> TextBuffer -> Cursor
+cursorToEndOfLine l buffer = Cursor l lineLen
+  where
+    lineLen = lineLength l (bufText buffer)
 
 selectLeft :: TextBuffer -> TextBuffer
 selectLeft buffer = updateCurrentColumn (go selection)
   where
     selection       = getSelection buffer
-    go (0,       _) = buffer
-    go (start, end) = buffer { bufSelection = Just (start - 1, end) }
-
-moveRight :: TextBuffer -> TextBuffer
-moveRight buffer = updateCurrentColumn (go selection)
-  where
-    selection = getSelection buffer
-    go (start, end)
-      | end == Seq.length (bufText buffer) = buffer
-      | start == end                       = buffer { bufSelection = Just (end + 1, end + 1) }
-    go (_, end)                            = buffer { bufSelection = Just (end, end) }
-
+    go (start, end) = buffer { bufSelection = Just (cursorLeft start buffer, end) }
 
 selectRight :: TextBuffer -> TextBuffer
 selectRight buffer = updateCurrentColumn (go selection)
   where
-    selection = getSelection buffer
-    go (_, end)
-      | end == Seq.length (bufText buffer) = buffer
-    go (start, end)                        = buffer { bufSelection = Just (start, end + 1) }
+    selection       = getSelection buffer
+    go (start, end) = buffer { bufSelection = Just (start, cursorRight end buffer) }
 
-selectAll :: TextBuffer -> TextBuffer
-selectAll buffer = updateCurrentColumn $ buffer { bufSelection = Just (0, length (bufText buffer)) }
+moveToStartOfLine :: LineNum -> TextBuffer -> TextBuffer
+moveToStartOfLine l buffer = moveTo (cursorToStartOfLine l) buffer
+
+cursorToStartOfLine :: LineNum -> Cursor
+cursorToStartOfLine l = Cursor l 0
+
+moveToEndOfLine :: LineNum -> TextBuffer -> TextBuffer
+moveToEndOfLine l buffer = moveTo (cursorToEndOfLine l buffer) buffer
+
+lineLength :: LineNum -> TextSeq -> Int
+lineLength l textSeq = length (Seq.index textSeq l)
+
+moveRight :: TextBuffer -> TextBuffer
+moveRight buffer = check selection
+  where
+    selection       = getSelection buffer
+    check (start, end)
+      | start == end = moveTo (cursorRight start buffer) buffer
+    check (_, end) = moveTo end buffer
+
+cursorRight :: Cursor -> TextBuffer -> Cursor
+cursorRight cursor@(Cursor l c) buffer
+  | l == maxLine &&
+    c == lineLength l text = cursor
+  | c == lineLength l text = cursorToStartOfLine (l + 1)
+  | otherwise = (Cursor l (c + 1))
+  where
+    maxLine = length text - 1
+    text = bufText buffer
 
 backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
     let (start, end) = getSelection buffer
-    in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
+    in insertString "" (if start == end then selectLeft buffer else buffer)
 
-moveToEnd :: TextBuffer -> TextBuffer
-moveToEnd buffer = 
-    let end = Seq.length (bufText buffer)
-    in moveCursorTo end buffer
+testSelection :: (Cursor, Cursor)
+testSelection = (Cursor 0 1, Cursor 1 2)
 
-moveToBeginning :: TextBuffer -> TextBuffer
-moveToBeginning = moveCursorTo 0
+testBuffer :: TextBuffer
+testBuffer = (textBufferFromString "hello\nworld\ngreat") {bufSelection=Just testSelection}
 
-moveDown :: TextBuffer -> TextBuffer
-moveDown buffer = 
-    let (cursorLocation, _)     = getSelection buffer
-        lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
-    -- If there's no newline beyond the cursor, do nothing
-    in case findIndex (>= cursorLocation) lineLocations of
-        Nothing -> buffer
-        Just nextLineIndex -> 
-            let nextLineLocation        = lineLocations !! nextLineIndex
-                nextNextLineLocation    = lineLocations !! (min (length lineLocations - 1) $ nextLineIndex + 1)
-                currentDistanceFromLeft = bufColumn buffer
-                -- Don't jump futher than the next newline location
-                newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
-            -- Don't use moveCursorTo here since we don't want to update the column
-            in buffer { bufSelection = Just (newCursor, newCursor) }
+test1 :: TextBuffer
+test1 = insertString "" testBuffer
 
+test2 :: TextSeq
+test2 = insertTextSeq testSelection
+    (textSeqFromString "ill\nhouse\nbo")
+    (textSeqFromString "hello\nworld\ngreat")
 
--- We still update the current column for the case
--- where we press up on the first line and return to column 0
-moveUp :: TextBuffer -> TextBuffer
-moveUp buffer = 
-    let (cursorLocation, _)     = getSelection buffer
-        -- Add artificial 'newlines' at the beginning of the document to simplify the algorithm
-        lineLocations           = (-1):(-1):Seq.elemIndicesL '\n' (bufText buffer)
-    -- If there's no newline beyond the cursor, do nothing
-    in case findIndex (>= cursorLocation) lineLocations of
-        Nothing -> buffer
-        Just nextLineIndex -> 
-            let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
-                prevLineLocation        = lineLocations !! (nextLineIndex - 2)
-                currentDistanceFromLeft = bufColumn buffer
-                -- Don't jump futher than the prev newline location
-                newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
-                -- Update the column iff we have hit up enough times to return to the beginning of the text
-                newColumn = if newCursor == 1 then 1 else bufColumn buffer
-            in buffer { bufSelection = Just (newCursor, newCursor), bufColumn = newColumn }
+test3 :: TextSeq
+test3 = insertTextSeq testSelection
+    (textSeqFromString "bo")
+    (textSeqFromString "hello\nworld\ngreat")
 
-getSelection :: TextBuffer -> (Int, Int)
-getSelection buffer = fromMaybe (0,0) (bufSelection buffer)
+test4 :: TextSeq
+test4 = insertTextSeq testSelection
+    (textSeqFromString "y")
+    (textSeqFromString "baggins")
 
--- currentIndentation buffer = 
---     let (cursorLocation, _) = getSelection buffer
---         (leftOfCursor, _) = splitAt cursorLocation (bufText buffer)
+test5 :: TextBuffer
+test5 = insertString "y"
+    (textBufferFromString "hello\nworld") { bufSelection = Just (Cursor 0 3, Cursor 0 4) }
 
--- getCurrentLine buffer = 
---     let (cursorLocation, _)     = getSelection buffer
---         (leftOfCursor, rightOfCursor) = Seq.splitAt cursorLocation buffer
---         (newlineLeft, newlineRight) = (Seq.elemIndexR '\n' leftOfCursor, 
---                                        (Seq.length leftOfCursor +) <$> Seq.elemIndexL '\n' rightOfCursor)
-    
-
-
--- main = do
---   flip runStateT newTextBuffer $ do
---     insert "hello"
---     insert " there"
---     insert "\n"
---     moveLeft
---     moveLeft
---     insert "mr."
---     insert "magpie"
---     selectLeft
---     selectLeft
---     insert ""
---     liftIO . print =<< get
+test6 :: TextSeq
+test6 = insertTextSeq (Cursor 0 3, Cursor 0 4)
+    (textSeqFromString "y")
+    (textSeqFromString "hello\nworld")
