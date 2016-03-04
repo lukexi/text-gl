@@ -6,6 +6,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Graphics.GL.TextBuffer.Input where
 
@@ -46,47 +47,47 @@ handleTextBufferEvent win e rendererLens = do
     superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
     -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
     if  | superIsDown -> do
-            onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse (rendererLens . txrTextBuffer)
+            onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse textBufferLens
             onKeyDown e Key'C      $ do
-                mTextBuffer <- preuse (rendererLens . txrTextBuffer)
+                mTextBuffer <- preuse textBufferLens
                 forM_ mTextBuffer $ \buffer -> 
                     setClipboardString win (selectionFromTextBuffer buffer)
             onKeyDown e Key'X      $ do
-                mTextBuffer <- preuse (rendererLens . txrTextBuffer)
+                mTextBuffer <- preuse textBufferLens
                 forM_ mTextBuffer $ \buffer -> 
                     setClipboardString win (selectionFromTextBuffer buffer)
-                (rendererLens . txrTextBuffer) %= backspace
+                textBufferLens %= backspace
             onKeyDown e Key'V      $ do
                 mString <- getClipboardString win
                 forM_ mString $ \string -> 
-                    (rendererLens . txrTextBuffer) %= insertString string
+                    textBufferLens %= insertString string
             onKeyDown e Key'Z      $ 
-                (rendererLens . txrTextBuffer) %= undo
+                textBufferLens %= undo
         | otherwise -> do
 
             onChar e $ \case 
-                (isBackspaceChar -> True) -> (rendererLens . txrTextBuffer) %= backspace
-                char                      -> (rendererLens . txrTextBuffer) %= insertChar char
-            onKey  e Key'Enter     $ (rendererLens . txrTextBuffer) %= insertChar '\n'
-            onKey  e Key'Backspace $ (rendererLens . txrTextBuffer) %= backspace
+                (isBackspaceChar -> True) -> textBufferLens %= backspace
+                char                      -> textBufferLens %= insertChar char
+            onKey  e Key'Enter     $ textBufferLens %= insertChar '\n'
+            onKey  e Key'Backspace $ textBufferLens %= backspace
 
-            onKey  e Key'Left      $ (rendererLens . txrTextBuffer) %= moveLeft
-            onKey  e Key'Right     $ (rendererLens . txrTextBuffer) %= moveRight
-            onKey  e Key'Down      $ (rendererLens . txrTextBuffer) %= moveDown
-            onKey  e Key'Up        $ (rendererLens . txrTextBuffer) %= moveUp
+            onKey  e Key'Left      $ textBufferLens %= moveLeft
+            onKey  e Key'Right     $ textBufferLens %= moveRight
+            onKey  e Key'Down      $ textBufferLens %= moveDown
+            onKey  e Key'Up        $ textBufferLens %= moveUp
 
-            onKeyWithMods e [ModKeyAlt]   Key'Left  $ (rendererLens . txrTextBuffer) %= moveWordLeft
-            onKeyWithMods e [ModKeyAlt]   Key'Right $ (rendererLens . txrTextBuffer) %= moveWordRight
+            onKeyWithMods e [ModKeyAlt]   Key'Left  $ textBufferLens %= moveWordLeft
+            onKeyWithMods e [ModKeyAlt]   Key'Right $ textBufferLens %= moveWordRight
 
             onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Right $ 
-                (rendererLens . txrTextBuffer) %= selectWordRight
+                textBufferLens %= selectWordRight
             onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Left $ 
-                (rendererLens . txrTextBuffer) %= selectWordLeft
+                textBufferLens %= selectWordLeft
 
-            onKeyWithMods e [ModKeyShift] Key'Left  $ (rendererLens . txrTextBuffer) %= selectLeft
-            onKeyWithMods e [ModKeyShift] Key'Right $ (rendererLens . txrTextBuffer) %= selectRight
-            onKeyWithMods e [ModKeyShift] Key'Up    $ (rendererLens . txrTextBuffer) %= selectUp
-            onKeyWithMods e [ModKeyShift] Key'Down  $ (rendererLens . txrTextBuffer) %= selectDown
+            onKeyWithMods e [ModKeyShift] Key'Left  $ textBufferLens %= selectLeft
+            onKeyWithMods e [ModKeyShift] Key'Right $ textBufferLens %= selectRight
+            onKeyWithMods e [ModKeyShift] Key'Up    $ textBufferLens %= selectUp
+            onKeyWithMods e [ModKeyShift] Key'Down  $ textBufferLens %= selectDown
 
     -- Continuously save the file
     let updateBuffer save = do
@@ -95,7 +96,7 @@ handleTextBufferEvent win e rendererLens = do
                 newRenderer <- updateMetrics renderer
                 rendererLens .= newRenderer
                 when save $ saveTextBuffer (newRenderer ^. txrTextBuffer)
-            -- buf <- preuse (rendererLens . txrTextBuffer)
+            -- buf <- preuse textBufferLens
             -- liftIO . print $ join $ bufSelection <$> buf
 
     onChar e                          $ \_ -> updateBuffer True
