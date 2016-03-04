@@ -73,6 +73,14 @@ handleTextBufferEvent win e rendererLens = do
             onKey  e Key'Down      $ (rendererLens . txrTextBuffer) %= moveDown
             onKey  e Key'Up        $ (rendererLens . txrTextBuffer) %= moveUp
 
+            onKeyWithMods e [ModKeyAlt]   Key'Left  $ (rendererLens . txrTextBuffer) %= moveWordLeft
+            onKeyWithMods e [ModKeyAlt]   Key'Right $ (rendererLens . txrTextBuffer) %= moveWordRight
+
+            onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Right $ 
+                (rendererLens . txrTextBuffer) %= selectWordRight
+            onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Left $ 
+                (rendererLens . txrTextBuffer) %= selectWordLeft
+
             onKeyWithMods e [ModKeyShift] Key'Left  $ (rendererLens . txrTextBuffer) %= selectLeft
             onKeyWithMods e [ModKeyShift] Key'Right $ (rendererLens . txrTextBuffer) %= selectRight
             onKeyWithMods e [ModKeyShift] Key'Up    $ (rendererLens . txrTextBuffer) %= selectUp
@@ -95,6 +103,12 @@ handleTextBufferEvent win e rendererLens = do
     onKey  e Key'Down                       $ updateBuffer False
     onKey  e Key'Left                       $ updateBuffer False
     onKey  e Key'Right                      $ updateBuffer False
+    
+    onKeyWithMods e [ModKeyAlt]   Key'Left  $ updateBuffer False
+    onKeyWithMods e [ModKeyAlt]   Key'Right $ updateBuffer False
+    onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Left  $ updateBuffer False
+    onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Right $ updateBuffer False
+
     onKeyWithMods e [ModKeyShift] Key'Left  $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Up    $ updateBuffer False

@@ -165,6 +165,8 @@ insert chars = insertTextBuffer chars
 
 moveTo :: Cursor -> TextBuffer -> TextBuffer
 moveTo cursor buffer = updateCurrentColumn $ moveTo' cursor buffer
+
+moveTo' :: Cursor -> TextBuffer -> TextBuffer
 moveTo' cursor buffer = buffer { bufSelection = Just (cursor, cursor) }
 
 moveLeft :: TextBuffer -> TextBuffer
@@ -195,6 +197,47 @@ cursorLeft :: Cursor -> TextBuffer -> Cursor
 cursorLeft (Cursor 0 0) _buffer = Cursor 0 0
 cursorLeft (Cursor l 0) buffer  = cursorToEndOfLine (l - 1) buffer
 cursorLeft (Cursor l c) _buffer = Cursor l (c - 1)
+
+moveWordLeft :: TextBuffer -> TextBuffer
+moveWordLeft buffer = check selection
+  where
+    selection        = getSelection buffer
+    check (start, end)
+      | start == end = moveTo (cursorWordLeft start buffer) buffer
+    check (start, _) = moveTo start buffer
+
+cursorWordLeft :: Cursor -> TextBuffer -> Cursor
+cursorWordLeft (Cursor 0 0) _buffer = Cursor 0 0
+cursorWordLeft (Cursor l 0) buffer  = cursorToEndOfLine (l - 1) buffer
+cursorWordLeft (Cursor l c) buffer = 
+    let curLine     = Seq.index (bufText buffer) l
+        spaces      = Seq.elemIndicesR ' ' curLine
+        boundaryCol = 0
+        nextSpaceL  = fromMaybe boundaryCol ((+1) <$> find (< (c-1)) spaces)
+    in Cursor l nextSpaceL
+
+cursorWordRight :: Cursor -> TextBuffer -> Cursor
+cursorWordRight cursor@(Cursor l c) buffer
+  | l == maxLine &&
+    c == lineLength l text = cursor
+  | c == lineLength l text = cursorToStartOfLine (l + 1)
+  | otherwise = 
+      let curLine     = Seq.index (bufText buffer) l
+          spaces      = Seq.elemIndicesL ' ' curLine
+          boundaryCol = lineLength l (bufText buffer)
+          nextSpaceR  = fromMaybe boundaryCol (find (> c) spaces)
+      in Cursor l nextSpaceR
+  where
+    maxLine = length text - 1
+    text = bufText buffer
+
+moveWordRight :: TextBuffer -> TextBuffer
+moveWordRight buffer = check selection
+  where
+    selection       = getSelection buffer
+    check (start, end)
+      | start == end = moveTo (cursorWordRight start buffer) buffer
+    check (_, end) = moveTo end buffer
 
 cursorUp :: Cursor -> TextBuffer -> Cursor
 cursorUp (Cursor 0 _) _buffer = Cursor 0 0
@@ -246,6 +289,18 @@ selectRight buffer = updateCurrentColumn (go selection)
     selection       = getSelection buffer
     go (start, end) = buffer { bufSelection = Just (start, cursorRight end buffer) }
 
+selectWordLeft :: TextBuffer -> TextBuffer
+selectWordLeft buffer = updateCurrentColumn (go selection)
+  where
+    selection       = getSelection buffer
+    go (start, end) = buffer { bufSelection = Just (cursorWordLeft start buffer, end) }
+
+selectWordRight :: TextBuffer -> TextBuffer
+selectWordRight buffer = updateCurrentColumn (go selection)
+  where
+    selection       = getSelection buffer
+    go (start, end) = buffer { bufSelection = Just (start, cursorWordRight end buffer) }
+
 moveToStartOfLine :: LineNum -> TextBuffer -> TextBuffer
 moveToStartOfLine l buffer = moveTo (cursorToStartOfLine l) buffer
 
@@ -275,6 +330,8 @@ cursorRight cursor@(Cursor l c) buffer
   where
     maxLine = length text - 1
     text = bufText buffer
+
+
 
 backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
