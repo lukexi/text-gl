@@ -8,3 +8,6 @@
 [ ] Clickable cursor position (use cursorPos/fgPointSize to find line, then search for character using kerning)
 
 [x] Abstract into MVP + Filename + HasFocus IORef so we can render many of these
+
+[ ] Click-drag to select
+ 

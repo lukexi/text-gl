@@ -53,6 +53,9 @@ textSeqFromString :: String -> TextSeq
 textSeqFromString = Seq.fromList . fmap Seq.fromList . lines . fixup
     -- Fix lines returning [] instead of [""] for an empty string
     where fixup "" = "\n"
+    -- FIXME: this works for single newline insertion only
+    -- Write a lines replacement that does what we want?
+          fixup "\n" = "\n\n"
           fixup other = other
 
 -- | `unlines` adds an unwanted trailing \n
