@@ -12,19 +12,26 @@ import Data.List hiding (insert)
 import Data.Maybe
 import Graphics.GL.TextBuffer.Types
 
+isZeroWidth :: Selection -> Bool
+isZeroWidth (start, end) = start == end
 
-zeroWidth :: Selection -> Maybe Cursor
-zeroWidth (start, end)
-    | start == end = Just start
-    | otherwise = Nothing
+getZeroWidth :: Selection -> Maybe Cursor
+getZeroWidth cursor@(start, _)
+    | isZeroWidth cursor = Just start
+    | otherwise          = Nothing
 
 cursorEqual :: Cursor -> Selection -> Bool
 cursorEqual cursor (selectionStart, selectionEnd) = cursor == selectionStart && cursor == selectionEnd
 
 cursorWithin :: Cursor -> Selection -> Bool
-cursorWithin (Cursor lineNum colNum) (Cursor startLineNum startColNum, Cursor endLineNum endColNum) =  
-    lineNum >= startLineNum && lineNum <= endLineNum &&
-    colNum >= startColNum   && colNum < endColNum
+cursorWithin (Cursor lineNum colNum) 
+             sel@(Cursor startLineNum startColNum, Cursor endLineNum endColNum) = 
+    not (isZeroWidth sel) &&
+    (lineNum >= startLineNum && lineNum <= endLineNum) &&
+        ((lineNum /= startLineNum && lineNum /= endLineNum) ||
+         (lineNum == startLineNum && colNum >= startColNum) ||
+         (lineNum == endLineNum   && colNum < endColNum)
+        )
 
 seqHead :: Seq a -> Maybe a
 seqHead seqn = case Seq.viewl seqn of
@@ -154,7 +161,8 @@ insert :: TextSeq -> TextBuffer -> TextBuffer
 insert chars = insertTextBuffer chars
 
 moveTo :: Cursor -> TextBuffer -> TextBuffer
-moveTo cursor buffer = updateCurrentColumn $ buffer { bufSelection = Just (cursor, cursor) }
+moveTo cursor buffer = updateCurrentColumn $ moveTo' cursor buffer
+moveTo' cursor buffer = buffer { bufSelection = Just (cursor, cursor) }
 
 moveLeft :: TextBuffer -> TextBuffer
 moveLeft buffer = check selection
@@ -169,15 +177,15 @@ moveDown buffer = check selection
   where
     selection        = getSelection buffer
     check (start, end)
-      | start == end = moveTo (cursorDown start buffer) buffer
-    check (_, end) = moveTo end buffer
+      | start == end = moveTo' (cursorDown start buffer) buffer
+    check (_, end)   = moveTo end buffer
 
 moveUp :: TextBuffer -> TextBuffer
 moveUp buffer = check selection
   where
     selection        = getSelection buffer
     check (start, end)
-      | start == end = moveTo (cursorUp start buffer) buffer
+      | start == end = moveTo' (cursorUp start buffer) buffer
     check (start, _) = moveTo start buffer
 
 cursorLeft :: Cursor -> TextBuffer -> Cursor
@@ -186,17 +194,22 @@ cursorLeft (Cursor l 0) buffer  = cursorToEndOfLine (l - 1) buffer
 cursorLeft (Cursor l c) _buffer = Cursor l (c - 1)
 
 cursorUp :: Cursor -> TextBuffer -> Cursor
-cursorUp (Cursor 0 0) _buffer = Cursor 0 0
-cursorUp (Cursor l c) buffer  = cursorToColumnInLine (l - 1) c buffer
+cursorUp (Cursor 0 _) _buffer = Cursor 0 0
+cursorUp (Cursor l _) buffer  = cursorToCurrentColumnInLine (l - 1) buffer
 
 cursorDown :: Cursor -> TextBuffer -> Cursor
-cursorDown cursor@(Cursor l c) buffer
+cursorDown cursor@(Cursor l _) buffer
   | l == maxLine = cursor
-  | otherwise    = cursorToColumnInLine (l + 1) c buffer
+  | otherwise    = cursorToCurrentColumnInLine (l + 1) buffer
   where
     maxLine = length text - 1
     text = bufText buffer
 
+cursorToCurrentColumnInLine :: LineNum -> TextBuffer -> Cursor
+cursorToCurrentColumnInLine l buffer = cursorToColumnInLine l c buffer
+    where c = bufColumn buffer
+
+cursorToColumnInLine :: LineNum -> ColNum -> TextBuffer -> Cursor
 cursorToColumnInLine l c buffer = Cursor l (min c lineLen)
   where
     lineLen = lineLength l (bufText buffer)
@@ -205,6 +218,18 @@ cursorToEndOfLine :: LineNum -> TextBuffer -> Cursor
 cursorToEndOfLine l buffer = Cursor l lineLen
   where
     lineLen = lineLength l (bufText buffer)
+
+selectUp :: TextBuffer -> TextBuffer
+selectUp buffer = go selection
+  where
+    selection       = getSelection buffer
+    go (start, end) = buffer { bufSelection = Just (cursorUp start buffer, end) }
+
+selectDown :: TextBuffer -> TextBuffer
+selectDown buffer = go selection
+  where
+    selection       = getSelection buffer
+    go (start, end) = buffer { bufSelection = Just (start, cursorDown end buffer) }
 
 selectLeft :: TextBuffer -> TextBuffer
 selectLeft buffer = updateCurrentColumn (go selection)

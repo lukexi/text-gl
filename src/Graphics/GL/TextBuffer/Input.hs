@@ -49,6 +49,11 @@ handleTextBufferEvent win e rendererLens = do
                 mTextBuffer <- preuse (rendererLens . txrTextBuffer)
                 forM_ mTextBuffer $ \buffer -> 
                     setClipboardString win (selectionFromTextBuffer buffer)
+            onKeyDown e Key'X      $ do
+                mTextBuffer <- preuse (rendererLens . txrTextBuffer)
+                forM_ mTextBuffer $ \buffer -> 
+                    setClipboardString win (selectionFromTextBuffer buffer)
+                (rendererLens . txrTextBuffer) %= backspace
             onKeyDown e Key'V      $ do
                 mString <- getClipboardString win
                 forM_ mString $ \string -> 
@@ -70,6 +75,8 @@ handleTextBufferEvent win e rendererLens = do
 
             onKeyWithMods e [ModKeyShift] Key'Left  $ (rendererLens . txrTextBuffer) %= selectLeft
             onKeyWithMods e [ModKeyShift] Key'Right $ (rendererLens . txrTextBuffer) %= selectRight
+            onKeyWithMods e [ModKeyShift] Key'Up    $ (rendererLens . txrTextBuffer) %= selectUp
+            onKeyWithMods e [ModKeyShift] Key'Down  $ (rendererLens . txrTextBuffer) %= selectDown
 
     -- Continuously save the file
     let updateBuffer save = do
@@ -89,5 +96,8 @@ handleTextBufferEvent win e rendererLens = do
     onKey  e Key'Right                      $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Left  $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Up    $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Down  $ updateBuffer False
     onKeyWithMods e [ModKeySuper] Key'Z     $ updateBuffer True
     onKeyWithMods e [ModKeySuper] Key'V     $ updateBuffer True
+    onKeyWithMods e [ModKeySuper] Key'X     $ updateBuffer True
