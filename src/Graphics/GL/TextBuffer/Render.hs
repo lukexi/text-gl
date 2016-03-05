@@ -47,8 +47,8 @@ createTextRenderer font textBuffer = do
         , _txrIndexBuffer        = glyphIndexBuffer
         , _txrOffsetBuffer       = glyphOffsetBuffer
         , _txrFont               = font
+        , _txrDragRoot           = Nothing
         }
-        
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer 
 -- and writes them into the TextRenderer's VertexBuffers
@@ -63,14 +63,14 @@ updateMetrics textRenderer@TextRenderer{..} = do
 -- We should keep the bounding boxes of the characters during
 -- calculateIndicesAndOffsets, which we should cache in the TextBuffer.
 -- We currently use the point size which is quite wrong
-castRayToTextRenderer :: MonadIO m => Ray Float -> TextRenderer -> M44 Float -> m (Maybe TextRenderer)
-castRayToTextRenderer ray textRenderer model44 = do
+rayToTextRendererCursor :: Ray Float -> TextRenderer -> M44 Float -> (Maybe Cursor)
+rayToTextRendererCursor ray textRenderer model44 = 
     let textModel44   = model44 !*! correctionMatrixForFont font
         font          = textRenderer ^. txrFont
         aabb          = (0, V3 1 (-1) 0) -- Is this right??
         mIntersection = rayOBBIntersection ray aabb textModel44
-    forM mIntersection $ \intersectionDistance -> do
-        let worldPoint       = projectRay ray intersectionDistance -- rayOrigin ray + rayDir ^* intersectionDistance
+    in join . flip fmap mIntersection $ \intersectionDistance -> 
+        let worldPoint       = projectRay ray intersectionDistance
             V3 cursX cursY _ = worldPointToModelPoint textModel44 worldPoint
             -- The width here is a guess; should get this from GlyphMetrics
             -- during updateIndicesAndOffsets
@@ -82,9 +82,26 @@ castRayToTextRenderer ray textRenderer model44 = do
                         && cursY > y 
                         && cursY < (y + charH)) 
                     charOffsets
-        case hits of
-            ((i, _):_) -> updateMetrics (textRenderer & txrTextBuffer %~ moveTo i)
-            []         -> return textRenderer
+        in case hits of
+            ((i, _):_) -> Just i
+            []         -> Nothing
+
+setCursorTextRendererWithRay :: MonadIO m => Ray GLfloat -> TextRenderer -> M44 GLfloat -> m TextRenderer
+setCursorTextRendererWithRay ray textRenderer model44 = 
+    case rayToTextRendererCursor ray textRenderer model44 of
+        Just i  -> updateMetrics (textRenderer & txrTextBuffer %~ moveTo i)
+        Nothing -> return textRenderer
+
+beginDrag :: MonadIO m => Cursor -> TextRenderer -> m TextRenderer
+beginDrag cursor textRenderer = 
+    updateMetrics (textRenderer & txrTextBuffer %~ moveTo cursor
+                                & txrDragRoot ?~ cursor)
+
+continueDrag :: MonadIO m => Cursor -> TextRenderer -> m TextRenderer
+continueDrag cursor textRenderer = case textRenderer ^. txrDragRoot of
+    Nothing -> return textRenderer
+    Just dragRoot -> updateMetrics (textRenderer & txrTextBuffer %~ setSelection newSel)
+        where newSel = if cursor > dragRoot then (dragRoot, cursor) else (cursor, dragRoot)
 
 renderText :: (MonadIO m) 
            => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()

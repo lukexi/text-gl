@@ -13,7 +13,7 @@ import Graphics.GL.Freetype.Types
 type TextSeq = Seq (Seq Char)
 type ColNum = Int
 type LineNum = Int
-data Cursor = Cursor LineNum ColNum deriving (Eq, Show)
+data Cursor = Cursor LineNum ColNum deriving (Eq, Show, Ord)
 type Selection = (Cursor, Cursor)
 
 data TextBuffer = TextBuffer 
@@ -37,5 +37,6 @@ data TextRenderer = TextRenderer
   , _txrOffsetBuffer :: !ArrayBuffer
   , _txrTextBuffer   :: !TextBuffer
   , _txrTextMetrics  :: !TextMetrics
+  , _txrDragRoot     :: !(Maybe Cursor)
   }
 makeLenses ''TextRenderer

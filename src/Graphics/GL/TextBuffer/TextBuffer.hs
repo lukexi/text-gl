@@ -292,6 +292,10 @@ selectRight buffer = updateCurrentColumn (go selection)
     selection       = getSelection buffer
     go (start, end) = buffer { bufSelection = Just (start, cursorRight end buffer) }
 
+setSelection selection buffer = 
+    updateCurrentColumn 
+        (buffer { bufSelection = Just selection })
+
 selectWordLeft :: TextBuffer -> TextBuffer
 selectWordLeft buffer = updateCurrentColumn (go selection)
   where

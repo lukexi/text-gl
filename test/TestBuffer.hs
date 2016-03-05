@@ -60,10 +60,17 @@ mainLoop win events = do
 
         handleTextBufferEvent win e id
         onMouseDown e $ \_ -> do
-            ray <- cursorPosToWorldRay win projection44 newPose
             textRenderer <- get
-            mUpdatedTextRenderer <- castRayToTextRenderer ray textRenderer model44
-            forM_ mUpdatedTextRenderer put
+            ray <- cursorPosToWorldRay win projection44 newPose
+            case rayToTextRendererCursor ray textRenderer model44 of
+                Just cursor -> put =<< beginDrag cursor textRenderer
+                Nothing -> return ()
+        onCursor e $ \_ _ -> do
+            textRenderer <- get
+            ray <- cursorPosToWorldRay win projection44 newPose
+            case rayToTextRendererCursor ray textRenderer model44 of
+                Just cursor -> put =<< continueDrag cursor textRenderer
+                Nothing -> return ()
 
     immutably $ do
         -- Clear the framebuffer
