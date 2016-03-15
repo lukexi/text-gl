@@ -10,6 +10,8 @@ import Control.Lens.Extra
 
 import Graphics.GL.Freetype.Types
 
+import Halive.FileListener
+
 type TextSeq = Seq (Seq Char)
 type ColNum = Int
 type LineNum = Int
@@ -38,5 +40,6 @@ data TextRenderer = TextRenderer
   , _txrTextBuffer   :: !TextBuffer
   , _txrTextMetrics  :: !TextMetrics
   , _txrDragRoot     :: !(Maybe Cursor)
+  , _txrFileWatcher  :: !(Maybe FileEventChan)
   }
 makeLenses ''TextRenderer

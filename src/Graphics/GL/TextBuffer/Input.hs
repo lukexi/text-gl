@@ -22,14 +22,49 @@ import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Render
 import Data.Char
 
+import Halive.FileListener
+
+data FileWatchMode = WatchFile | NoWatchFile deriving (Eq, Show)
+
 -- | Recognize certain control characters and react to them appropriately
 isBackspaceChar :: Char -> Bool
 isBackspaceChar = (== 8) . ord
 
-textRendererFromFile :: MonadIO m => Font -> FilePath -> m TextRenderer
-textRendererFromFile font filePath = liftIO $ do
+-- | Must call refreshTextRendererFromFile
+textRendererFromFile :: MonadIO m => Font -> FilePath -> FileWatchMode -> m TextRenderer
+textRendererFromFile font filePath watchMode = liftIO $ do
     text <- readFile filePath
-    createTextRenderer font (textBufferWithPath filePath text)
+    textRenderer <- createTextRenderer font (textBufferWithPath filePath text)
+
+    case watchMode of
+        NoWatchFile -> return textRenderer
+        WatchFile -> do
+            fileWatcher <- eventListenerForFile filePath
+            return $ textRenderer & txrFileWatcher ?~ fileWatcher
+
+-- | Must pass WatchFile to textRendererFromFile to use this
+refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m) 
+                            => Traversal' s TextRenderer -> m ()
+refreshTextRendererFromFile rendererLens = do
+    let textBufferLens :: Traversal' s TextBuffer
+        textBufferLens = rendererLens . txrTextBuffer
+    mTextRenderer <- preuse rendererLens
+    forM_ mTextRenderer $ \textRenderer -> 
+        forM_ (textRenderer ^. txrFileWatcher) $ \fileWatcher -> 
+            forM_ (bufPath (textRenderer ^. txrTextBuffer)) $ \filePath -> 
+                onFileEvent fileWatcher $ do
+                    text <- liftIO $ readFile filePath
+                    textBufferLens %= setTextFromString text
+
+                    updateTextBufferMetricsWithLens rendererLens
+
+updateTextBufferMetricsWithLens :: forall s m. (MonadState s m, MonadIO m) 
+                                 => Traversal' s TextRenderer -> m ()
+updateTextBufferMetricsWithLens rendererLens = do
+    mTextRenderer <- preuse rendererLens
+    forM_ mTextRenderer $ \textRenderer -> do
+        newRenderer <- updateMetrics textRenderer
+        rendererLens .= newRenderer
 
 saveTextBuffer :: MonadIO m => TextBuffer -> m ()
 saveTextBuffer buffer = liftIO $ case bufPath buffer of
@@ -91,13 +126,11 @@ handleTextBufferEvent win e rendererLens = do
 
     -- Continuously save the file
     let updateBuffer save = do
-            maybeRenderer <- preuse rendererLens
-            forM_ maybeRenderer $ \renderer -> do
-                newRenderer <- updateMetrics renderer
-                rendererLens .= newRenderer
-                when save $ saveTextBuffer (newRenderer ^. txrTextBuffer)
-            -- buf <- preuse textBufferLens
-            -- liftIO . print $ join $ bufSelection <$> buf
+            updateTextBufferMetricsWithLens rendererLens
+            when save $ do
+                maybeRenderer <- preuse rendererLens
+                forM_ maybeRenderer $ \renderer -> do
+                    saveTextBuffer (renderer ^. txrTextBuffer)
 
     onChar e                          $ \_ -> updateBuffer True
     onKey  e Key'Enter                      $ updateBuffer True

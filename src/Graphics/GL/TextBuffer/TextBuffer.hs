@@ -83,10 +83,33 @@ textBufferWithPath filePath string = newTextBuffer
     }
 
 textBufferFromString :: String -> TextBuffer
-textBufferFromString string = newTextBuffer 
+textBufferFromString string = newTextBuffer
     { bufText = textSeqFromString string
-    }
+    } 
 
+setTextFromString :: String -> TextBuffer -> TextBuffer 
+setTextFromString string buffer = 
+    pushUndo . validateSelection $ 
+        buffer
+          { bufText = textSeqFromString string
+          }
+
+validateSelection :: TextBuffer -> TextBuffer
+validateSelection textBuffer@TextBuffer{..} = case bufSelection of
+    Nothing -> textBuffer
+    Just (cursorBegin, cursorEnd) -> updateCurrentColumn $ textBuffer 
+        { bufSelection = Just ( validateCursor cursorBegin textBuffer
+                              , validateCursor cursorEnd   textBuffer)
+        }
+
+-- | Verify that the given cursor is within the boundaries of the text buffer
+validateCursor :: Cursor -> TextBuffer -> Cursor
+validateCursor cursor@(Cursor lineNum colNum) textBuffer@TextBuffer{..} 
+    | lineNum >= maxLine    = cursorToEndOfLine maxLine textBuffer
+    | colNum  >= maxLineCol = cursorToEndOfLine lineNum textBuffer
+    | otherwise             = cursor
+    where maxLine      = length bufText - 1
+          maxLineCol   = lineLength lineNum bufText
 
 stringFromTextBuffer :: TextBuffer -> String
 stringFromTextBuffer = stringFromTextSeq . bufText
@@ -292,6 +315,7 @@ selectRight buffer = updateCurrentColumn (go selection)
     selection       = getSelection buffer
     go (start, end) = buffer { bufSelection = Just (start, cursorRight end buffer) }
 
+setSelection :: Selection -> TextBuffer -> TextBuffer
 setSelection selection buffer = 
     updateCurrentColumn 
         (buffer { bufSelection = Just selection })

@@ -48,6 +48,7 @@ createTextRenderer font textBuffer = do
         , _txrOffsetBuffer       = glyphOffsetBuffer
         , _txrFont               = font
         , _txrDragRoot           = Nothing
+        , _txrFileWatcher        = Nothing
         }
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer 

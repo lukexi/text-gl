@@ -1,7 +1,7 @@
-diff --git a/platform.h b/platform.h
+diff --git a/freetype-gl/platform.h b/freetype-gl/platform.h
 index dc875d0..d720876 100644
---- a/platform.h
-+++ b/platform.h
+--- a/freetype-gl/platform.h
++++ b/freetype-gl/platform.h
 @@ -58,6 +58,7 @@ namespace ftgl {
      char * strndup( const char *s1, size_t n);
  #elif defined(_WIN32) || defined(_WIN64)
