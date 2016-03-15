@@ -78,10 +78,12 @@ handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m)
 handleTextBufferEvent win e rendererLens = do
     let textBufferLens :: Traversal' s TextBuffer
         textBufferLens = rendererLens . txrTextBuffer
-    -- let bufferLens = rendererLens . txrTextBuffer :: (Traversal' s TextBuffer)
-    superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
+        --(commandKey, commandModKey, optionModKey) = (Key'LeftSuper, ModKeySuper, ModKeyAlt) -- Mac
+        (commandKey, commandModKey, optionModKey) = (Key'LeftControl, ModKeyControl, ModKeyAlt) -- Windows
+
+    commandIsDown <- (== KeyState'Pressed) <$> getKey win commandKey
     -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
-    if  | superIsDown -> do
+    if  | commandIsDown -> do
             onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse textBufferLens
             onKeyDown e Key'C      $ do
                 mTextBuffer <- preuse textBufferLens
@@ -111,12 +113,12 @@ handleTextBufferEvent win e rendererLens = do
             onKey  e Key'Down      $ textBufferLens %= moveDown
             onKey  e Key'Up        $ textBufferLens %= moveUp
 
-            onKeyWithMods e [ModKeyAlt]   Key'Left  $ textBufferLens %= moveWordLeft
-            onKeyWithMods e [ModKeyAlt]   Key'Right $ textBufferLens %= moveWordRight
+            onKeyWithMods e [optionModKey]   Key'Left  $ textBufferLens %= moveWordLeft
+            onKeyWithMods e [optionModKey]   Key'Right $ textBufferLens %= moveWordRight
 
-            onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Right $ 
+            onKeyWithMods e [optionModKey, ModKeyShift]   Key'Right $ 
                 textBufferLens %= selectWordRight
-            onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Left $ 
+            onKeyWithMods e [optionModKey, ModKeyShift]   Key'Left $ 
                 textBufferLens %= selectWordLeft
 
             onKeyWithMods e [ModKeyShift] Key'Left  $ textBufferLens %= selectLeft
@@ -140,17 +142,17 @@ handleTextBufferEvent win e rendererLens = do
     onKey  e Key'Left                       $ updateBuffer False
     onKey  e Key'Right                      $ updateBuffer False
     
-    onKeyWithMods e [ModKeyAlt]   Key'Left  $ updateBuffer False
-    onKeyWithMods e [ModKeyAlt]   Key'Right $ updateBuffer False
-    onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Left  $ updateBuffer False
-    onKeyWithMods e [ModKeyAlt, ModKeyShift]   Key'Right $ updateBuffer False
+    onKeyWithMods e [optionModKey]   Key'Left  $ updateBuffer False
+    onKeyWithMods e [optionModKey]   Key'Right $ updateBuffer False
+    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Left  $ updateBuffer False
+    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Right $ updateBuffer False
 
     onKeyWithMods e [ModKeyShift] Key'Left  $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Up    $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Down  $ updateBuffer False
-    onKeyWithMods e [ModKeySuper] Key'Z     $ updateBuffer True
-    onKeyWithMods e [ModKeySuper] Key'V     $ updateBuffer True
-    onKeyWithMods e [ModKeySuper] Key'X     $ updateBuffer True
+    onKeyWithMods e [commandModKey] Key'Z     $ updateBuffer True
+    onKeyWithMods e [commandModKey] Key'V     $ updateBuffer True
+    onKeyWithMods e [commandModKey] Key'X     $ updateBuffer True
 
     
