@@ -9,7 +9,6 @@
 
 [x] Abstract into MVP + Filename + HasFocus IORef so we can render many of these
 
-
-
-hello my name is
 [x] Click-drag to select
+
+[x] Auto-indent on newline

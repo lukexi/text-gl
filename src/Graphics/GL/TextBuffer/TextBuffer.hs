@@ -165,6 +165,8 @@ insertTextSeq sel textSeq origTextSeq = result
             textSeq)
         <> after 
 
+-- | Insert some text into an existing buffer.
+-- Pushes an undo, updates the current column, and updates the cursor.
 insertTextBuffer :: TextSeq -> TextBuffer -> TextBuffer
 insertTextBuffer textSeq buffer = updateCurrentColumn $ newBuffer
     { bufText      = newText
@@ -173,6 +175,7 @@ insertTextBuffer textSeq buffer = updateCurrentColumn $ newBuffer
     where
         newBuffer = pushUndo buffer
         newText   = insertTextSeq (getSelection buffer) textSeq (bufText buffer)
+        -- Calculate where the cursor should be after inserting the text
         newCursor = Cursor newLineNum newColNum
         newLineNum = startLineNum + (length textSeq - 1)
         newColNum = if newLineNum == startLineNum then startColNum + lastLen else lastLen
@@ -368,6 +371,19 @@ backspace :: TextBuffer -> TextBuffer
 backspace buffer = 
     let (start, end) = getSelection buffer
     in insertString "" (if start == end then selectLeft buffer else buffer)
+
+carriageReturn :: TextBuffer -> TextBuffer
+carriageReturn buffer = 
+    let indent = currentIndentation buffer
+    in insertString ('\n' : replicate indent ' ') buffer
+    
+currentIndentation :: TextBuffer -> Int
+currentIndentation buffer = lineIndentation l (bufText buffer)
+    where (Cursor l _, _) = getSelection buffer
+
+lineIndentation :: Int -> Seq (Seq Char) -> Int
+lineIndentation l textSeq = Seq.length . Seq.takeWhileL (== ' ') $ line
+    where line = Seq.index textSeq l
 
 testSelection :: (Cursor, Cursor)
 testSelection = (Cursor 0 1, Cursor 1 2)

@@ -105,7 +105,7 @@ handleTextBufferEvent win e rendererLens = do
             onChar e $ \case 
                 (isBackspaceChar -> True) -> textBufferLens %= backspace
                 char                      -> textBufferLens %= insertChar char
-            onKey  e Key'Enter     $ textBufferLens %= insertChar '\n'
+            onKey  e Key'Enter     $ textBufferLens %= carriageReturn
             onKey  e Key'Backspace $ textBufferLens %= backspace
 
             onKey  e Key'Left      $ textBufferLens %= moveLeft
