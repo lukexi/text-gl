@@ -1,15 +1,22 @@
+
+[ ] Scrolling (use fgPointSize * length bufText to find max height)
+  [ ] Define maxHeight for text windows and clip outside of it
+
+[ ] Move lines up/down
+
+[ ] Ctrl-f/ctrl-b
+
+[ ] Scroll navigation with Vive touchpads. See Windows Phone: https://imgur.com/eX2bfHp
+
 [x] currentColumn state that is remembered when pressing up and down, and only changed with left and right
 
 [x] Make selection/cursor optional
 
-[ ] Scrolling (use fgPointSize * length bufText to find max height)
-  [ ] Define maxHeight for text windows and clip outside of it
 
 [x] Clickable cursor position (use cursorPos/fgPointSize to find line, then search for character using kerning)
 
 [x] Abstract into MVP + Filename + HasFocus IORef so we can render many of these
 
-
-
-hello my name is
 [x] Click-drag to select
+
+[x] Auto-indent on newline
