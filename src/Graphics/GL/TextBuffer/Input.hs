@@ -46,17 +46,22 @@ textRendererFromFile font filePath watchMode = liftIO $ do
 refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m) 
                             => Traversal' s TextRenderer -> m ()
 refreshTextRendererFromFile rendererLens = do
-    let textBufferLens :: Traversal' s TextBuffer
-        textBufferLens = rendererLens . txrTextBuffer
+    
     mTextRenderer <- preuse rendererLens
     forM_ mTextRenderer $ \textRenderer -> 
         forM_ (textRenderer ^. txrFileWatcher) $ \fileWatcher -> 
             forM_ (bufPath (textRenderer ^. txrTextBuffer)) $ \filePath -> 
                 onFileEvent fileWatcher $ do
                     text <- liftIO $ readFile filePath
-                    textBufferLens %= setTextFromString text
+                    setTextRendererText rendererLens text
 
-                    updateTextBufferMetricsWithLens rendererLens
+setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
+                    => Traversal' s TextRenderer -> String -> m ()
+setTextRendererText rendererLens text = do
+    let textBufferLens :: Traversal' s TextBuffer
+        textBufferLens = rendererLens . txrTextBuffer
+    textBufferLens %= setTextFromString text
+    updateTextBufferMetricsWithLens rendererLens
 
 updateTextBufferMetricsWithLens :: forall s m. (MonadState s m, MonadIO m) 
                                  => Traversal' s TextRenderer -> m ()
