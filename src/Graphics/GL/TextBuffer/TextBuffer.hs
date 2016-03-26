@@ -134,8 +134,11 @@ currentColumn :: TextBuffer -> Int
 currentColumn buffer@TextBuffer{..} = startColNum
     where (Cursor _ startColNum, _) = getSelection buffer
 
+
+-- FIXME Disabling Undo while I verify that it doesn't cause too much memory pressure implemented this way
 pushUndo :: TextBuffer -> TextBuffer
-pushUndo buffer = buffer { bufUndo = Just buffer }
+--pushUndo buffer = buffer { bufUndo = Just buffer }
+pushUndo = id
 
 undo :: TextBuffer -> TextBuffer
 undo buffer = case bufUndo buffer of
