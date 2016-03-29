@@ -21,7 +21,8 @@ import Graphics.GL.TextBuffer.Types
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Render
 import Data.Char
-
+import Data.IORef
+import Control.Concurrent
 import Halive.FileListener
 
 data FileWatchMode = WatchFile | NoWatchFile deriving (Eq, Show)
@@ -78,8 +79,15 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
         putStrLn $ "Saving " ++ bufferPath ++ "..."
         writeFile bufferPath (stringFromTextBuffer buffer)
 
+-- FIXME
+-- This is in due of a nice refactoring where the key commands, 
+-- the updateBuffer and "ShouldSave" flags 
+-- (which are currently very error-prone as they must be manually duplicated after the actual editing action)
+-- are all made declarative and then interpreted once.
+
+-- Returns True if the given event caused a save action in the file
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
-                      => Window -> Event -> Traversal' s TextRenderer -> m ()
+                      => Window -> Event -> Traversal' s TextRenderer -> m Bool
 handleTextBufferEvent win e rendererLens = do
     let textBufferLens :: Traversal' s TextBuffer
         textBufferLens = rendererLens . txrTextBuffer
@@ -121,9 +129,9 @@ handleTextBufferEvent win e rendererLens = do
             onKeyWithMods e [optionModKey]   Key'Left  $ textBufferLens %= moveWordLeft
             onKeyWithMods e [optionModKey]   Key'Right $ textBufferLens %= moveWordRight
 
-            onKeyWithMods e [optionModKey, ModKeyShift]   Key'Right $ 
+            onKeyWithMods e [optionModKey, ModKeyShift] Key'Right $ 
                 textBufferLens %= selectWordRight
-            onKeyWithMods e [optionModKey, ModKeyShift]   Key'Left $ 
+            onKeyWithMods e [optionModKey, ModKeyShift] Key'Left $ 
                 textBufferLens %= selectWordLeft
 
             onKeyWithMods e [ModKeyShift] Key'Left  $ textBufferLens %= selectLeft
@@ -131,33 +139,36 @@ handleTextBufferEvent win e rendererLens = do
             onKeyWithMods e [ModKeyShift] Key'Up    $ textBufferLens %= selectUp
             onKeyWithMods e [ModKeyShift] Key'Down  $ textBufferLens %= selectDown
 
+    didSave <- liftIO (newIORef False)
     -- Continuously save the file
     let updateBuffer save = do
             updateTextBufferMetricsWithLens rendererLens
             when save $ do
+                liftIO (writeIORef didSave True)
                 maybeRenderer <- preuse rendererLens
                 forM_ maybeRenderer $ \renderer -> do
-                    saveTextBuffer (renderer ^. txrTextBuffer)
+                    liftIO . forkIO $ saveTextBuffer (renderer ^. txrTextBuffer)
 
-    onChar e                          $ \_ -> updateBuffer True
-    onKey  e Key'Enter                      $ updateBuffer True
-    onKey  e Key'Backspace                  $ updateBuffer True
-    onKey  e Key'Up                         $ updateBuffer False
-    onKey  e Key'Down                       $ updateBuffer False
-    onKey  e Key'Left                       $ updateBuffer False
-    onKey  e Key'Right                      $ updateBuffer False
-    
-    onKeyWithMods e [optionModKey]   Key'Left  $ updateBuffer False
-    onKeyWithMods e [optionModKey]   Key'Right $ updateBuffer False
-    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Left  $ updateBuffer False
-    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Right $ updateBuffer False
+    onChar e                            $ \_ -> updateBuffer True
+    onKey  e Key'Enter                        $ updateBuffer True
+    onKey  e Key'Backspace                    $ updateBuffer True
+    onKey  e Key'Up                           $ updateBuffer False
+    onKey  e Key'Down                         $ updateBuffer False
+    onKey  e Key'Left                         $ updateBuffer False
+    onKey  e Key'Right                        $ updateBuffer False
 
-    onKeyWithMods e [ModKeyShift] Key'Left  $ updateBuffer False
-    onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
-    onKeyWithMods e [ModKeyShift] Key'Up    $ updateBuffer False
-    onKeyWithMods e [ModKeyShift] Key'Down  $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Left    $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Right   $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Up      $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Down    $ updateBuffer False
     onKeyWithMods e [commandModKey] Key'Z     $ updateBuffer True
     onKeyWithMods e [commandModKey] Key'V     $ updateBuffer True
     onKeyWithMods e [commandModKey] Key'X     $ updateBuffer True
 
+    onKeyWithMods e [optionModKey]                Key'Left  $ updateBuffer False
+    onKeyWithMods e [optionModKey]                Key'Right $ updateBuffer False
+    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Left  $ updateBuffer False
+    onKeyWithMods e [optionModKey, ModKeyShift]   Key'Right $ updateBuffer False
+
+    liftIO (readIORef didSave)
     

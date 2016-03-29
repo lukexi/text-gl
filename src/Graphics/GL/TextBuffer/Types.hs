@@ -19,27 +19,27 @@ data Cursor = Cursor LineNum ColNum deriving (Eq, Show, Ord)
 type Selection = (Cursor, Cursor)
 
 data TextBuffer = TextBuffer 
-  { bufSelection    :: !(Maybe Selection)
-  , bufColumn       :: !Int
-  , bufText         :: !TextSeq
-  , bufPath         :: !(Maybe FilePath)
-  , bufUndo         :: !(Maybe TextBuffer)
-  } deriving Show
+    { bufSelection    :: !(Maybe Selection)
+    , bufColumn       :: !Int
+    , bufText         :: !TextSeq
+    , bufPath         :: !(Maybe FilePath)
+    , bufUndo         :: !(Maybe TextBuffer)
+    } deriving Show
 
 data TextMetrics = TextMetrics
-  { txmCharIndices :: ![GLint]
-  , txmCharOffsets :: ![(Cursor, V2 GLfloat)]
-  , txmNumChars    :: !Int
-  }
+    { txmCharIndices :: ![GLint]
+    , txmCharOffsets :: ![(Cursor, V2 GLfloat)]
+    , txmNumChars    :: !Int
+    }
 
 data TextRenderer = TextRenderer
-  { _txrFont         :: !Font
-  , _txrVAO          :: !VertexArrayObject
-  , _txrIndexBuffer  :: !ArrayBuffer
-  , _txrOffsetBuffer :: !ArrayBuffer
-  , _txrTextBuffer   :: !TextBuffer
-  , _txrTextMetrics  :: !TextMetrics
-  , _txrDragRoot     :: !(Maybe Cursor)
-  , _txrFileWatcher  :: !(Maybe FileEventChan)
-  }
+    { _txrFont         :: !Font
+    , _txrVAO          :: !VertexArrayObject
+    , _txrIndexBuffer  :: !ArrayBuffer
+    , _txrOffsetBuffer :: !ArrayBuffer
+    , _txrTextBuffer   :: !TextBuffer
+    , _txrTextMetrics  :: !TextMetrics
+    , _txrDragRoot     :: !(Maybe Cursor)
+    , _txrFileWatcher  :: !(Maybe FileEventChan)
+    }
 makeLenses ''TextRenderer
