@@ -92,17 +92,3 @@ createFontWithChars fontFile pointSize shader characters = liftIO $ do
       , fntPointSize          = pointSize
       , fntGlyphForChar       = glyphForChar
       }
-
-
-
-
-correctionMatrixForFont :: Fractional a => Font -> M44 a
-correctionMatrixForFont Font{..} = correctedMVP
-  where
-    -- Ensures the characters are always the same 
-    -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
-    -- Also scale by the width of a wide character
-    charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
-    correctedMVP = translateMatrix (V3 (-0.5) (0.5) 0) 
-               !*! scaleMatrix resolutionCompensationScale

@@ -12,6 +12,7 @@ import Control.Monad
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.Font
+import Graphics.GL.Freetype.API
 import Graphics.GL.TextBuffer.Metrics
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Types
@@ -66,7 +67,7 @@ updateMetrics textRenderer@TextRenderer{..} = do
 -- We currently use the point size which is quite wrong
 rayToTextRendererCursor :: Ray Float -> TextRenderer -> M44 Float -> (Maybe Cursor)
 rayToTextRendererCursor ray textRenderer model44 = 
-    let textModel44   = model44 !*! correctionMatrixForFont font
+    let textModel44   = model44 !*! correctionMatrixForTextRenderer textRenderer
         font          = textRenderer ^. txrFont
         aabb          = (0, V3 1 (-1) 0) -- Is this right??
         mIntersection = rayOBBIntersection ray aabb textModel44
@@ -104,6 +105,30 @@ continueDrag cursor textRenderer = case textRenderer ^. txrDragRoot of
     Just dragRoot -> updateMetrics (textRenderer & txrTextBuffer %~ setSelection newSel)
         where newSel = if cursor > dragRoot then (dragRoot, cursor) else (cursor, dragRoot)
 
+
+correctionMatrixForTextRenderer :: TextRenderer -> M44 Float
+correctionMatrixForTextRenderer textRenderer = 
+            scaleMatrix resolutionCompensationScale 
+        !*! translateMatrix centeringOffset
+  where
+    (dimX, dimY) = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
+    font = textRenderer ^. txrFont
+    (numCharsX, numCharsY) = (realToFrac dimX, realToFrac dimY)
+    -- Also scale by the width of a wide character
+    charWidthFull = gmAdvanceX (glyMetrics (fntGlyphForChar font $ '_')) * numCharsX
+    charHeightFull = fntPointSize font
+    charHeight = 1 / charHeightFull
+    --charWidth  = 1 / charWidthFull
+    lineSpacingOffset = charHeightFull * 0.15
+    centeringOffset = V3 (-charWidthFull/2) (charHeightFull * numCharsY/2 + lineSpacingOffset) 0
+    -- Ensures the characters are always the same 
+    -- size no matter what point size was specified
+    resolutionCompensationScale = realToFrac charHeight
+
+-- | RenderText renders at a scale where 1 GL Unit = 1 fullheight character.
+-- All text is rendered centered based on the number of rows and the largest number
+-- of columns. So to choose how many characters you want to be able to fit, you should
+-- scale the text's Model matrix by 1/numChars.
 renderText :: (MonadIO m) 
            => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
 renderText textRenderer mvp color = do
@@ -114,7 +139,8 @@ renderText textRenderer mvp color = do
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
-    let correctedMVP      = mvp !*! correctionMatrixForFont font
+    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
+                                        
 
     uniformM44 uMVP     correctedMVP
     uniformI   uTexture 0
@@ -123,5 +149,5 @@ renderText textRenderer mvp color = do
     let numVertices  = 4
         numInstances = fromIntegral txmNumChars
     withVAO rendererVAO $ 
-      glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
+        glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()

@@ -26,11 +26,11 @@ data Uniforms = Uniforms
 
 frameChars = unlines
     [ "X"
-    , "$MALL"
-    , "Hello" 
-    , "What's" 
-    , "Up" 
-    , "Doc" 
+    --, "$MALL"
+    --, "Hello" 
+    --, "What's" 
+    --, "Up" 
+    --, "Doc" 
     --, "Who's~~~~~~~~~~~" 
     --, "The" 
     --, "Best" 
@@ -59,49 +59,6 @@ main = do
 
     void . flip runStateT textRenderer . whileWindow win $ 
         mainLoop win events planeShape
-
-correctionMatrixForFont' :: Font -> (Int, Int) -> Float -> M44 Float
-correctionMatrixForFont' Font{..} (dimX, dimY) finalScale = correctedMVP
-  where
-    finalScale = 0.1
-    (numCharsX, numCharsY) = (realToFrac dimX, realToFrac dimY)
-    -- Also scale by the width of a wide character
-    charWidthFull = gmAdvanceX (glyMetrics (fntGlyphForChar '_')) * numCharsX
-    charHeightFull = fntPointSize
-    charHeight = 1 / charHeightFull
-    charWidth  = 1 / charWidthFull
-    lineSpacingOffset = fntPointSize * 0.15
-    centeringOffset = V3 (-charWidthFull/2) (charHeightFull * numCharsY/2 + lineSpacingOffset) 0
-    -- Ensures the characters are always the same 
-    -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac charHeight
-    correctedMVP = scaleMatrix (resolutionCompensationScale * realToFrac finalScale) 
-               !*! translateMatrix (centeringOffset)
-
-
-renderText' :: (MonadIO m) 
-           => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
-renderText' textRenderer mvp color = do
-    let font@Font{..}     = textRenderer ^. txrFont
-        TextMetrics{..}   = textRenderer ^. txrTextMetrics
-        GlyphUniforms{..} = fntUniforms
-        rendererVAO       = textRenderer ^. txrVAO
-    useProgram fntShader
-    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
-
-    let dims = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
-    let correctedMVP      = mvp !*! correctionMatrixForFont' font dims 1
-                                        
-
-    uniformM44 uMVP     correctedMVP
-    uniformI   uTexture 0
-    uniformV3  uColor   color
-
-    let numVertices  = 4
-        numInstances = fromIntegral txmNumChars
-    withVAO rendererVAO $ 
-        glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
-    return ()
 
 
 mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> Shape Uniforms -> m ()
@@ -143,7 +100,7 @@ mainLoop win events planeShape = do
     --put =<< updateMetrics =<< get
     
     textRenderer <- use id
-    renderText' textRenderer mvp (V3 1 1 1)
+    renderText textRenderer mvp (V3 1 1 1)
     
     swapBuffers win
 
