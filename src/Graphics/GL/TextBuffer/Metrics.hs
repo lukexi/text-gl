@@ -17,7 +17,7 @@ calculateMetrics TextBuffer{..} Font{..} =
         glyphForChar       = fntGlyphForChar
         pointSize          = fntPointSize
         renderLine (indicesL, offsetsL) lineNum line = 
-            let charYOffset = -(fromIntegral lineNum) * pointSize
+            let charYOffset = -(fromIntegral lineNum + 1) * pointSize
                 renderChar (lastXOffset, maybeLastChar, indicesC, offsetsC) colNum character =
                       -- Render newlines as spaces
                     let glyph   = glyphForChar character

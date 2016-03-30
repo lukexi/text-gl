@@ -25,19 +25,25 @@ data Uniforms = Uniforms
 -------------------------------------------------------------
 
 frameChars = unlines
-    [ "Hello My Dolly"
-    , "Hello My Baby" 
-    , "Hello My String Time Gal" 
-    ] 
+    [ "X"
+    , "$MALL"
+    , "Hello" 
+    , "What's" 
+    , "Up" 
+    , "Doc" 
+    --, "Who's~~~~~~~~~~~" 
+    --, "The" 
+    --, "Best" 
+    --, "Around" 
+    ]
 
 main :: IO ()
 main = do
 
-    print "HELLOTHERE"
     (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
 
     glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
-    font      <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphProg
+    font      <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 100 glyphProg
 
     shader     <- createShaderProgram "test/geo.vert" "test/geo.frag"
     planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
@@ -47,23 +53,30 @@ main = do
     -- glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-    glGetErrors
+    --glGetErrors
 
     textRenderer <- createTextRenderer font (textBufferFromString frameChars)
 
     void . flip runStateT textRenderer . whileWindow win $ 
         mainLoop win events planeShape
 
-correctionMatrixForFont' :: Fractional a => Font -> M44 a
-correctionMatrixForFont' Font{..} = correctedMVP
+correctionMatrixForFont' :: Font -> (Int, Int) -> Float -> M44 Float
+correctionMatrixForFont' Font{..} (dimX, dimY) finalScale = correctedMVP
   where
+    finalScale = 0.1
+    (numCharsX, numCharsY) = (realToFrac dimX, realToFrac dimY)
+    -- Also scale by the width of a wide character
+    charWidthFull = gmAdvanceX (glyMetrics (fntGlyphForChar '_')) * numCharsX
+    charHeightFull = fntPointSize
+    charHeight = 1 / charHeightFull
+    charWidth  = 1 / charWidthFull
+    lineSpacingOffset = fntPointSize * 0.15
+    centeringOffset = V3 (-charWidthFull/2) (charHeightFull * numCharsY/2 + lineSpacingOffset) 0
     -- Ensures the characters are always the same 
     -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
-    -- Also scale by the width of a wide character
-    charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
-    correctedMVP = translateMatrix (V3 (-0.5) (0.5) 0) 
-               !*! scaleMatrix resolutionCompensationScale
+    resolutionCompensationScale = realToFrac charHeight
+    correctedMVP = scaleMatrix (resolutionCompensationScale * realToFrac finalScale) 
+               !*! translateMatrix (centeringOffset)
 
 
 renderText' :: (MonadIO m) 
@@ -76,7 +89,9 @@ renderText' textRenderer mvp color = do
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
-    let correctedMVP      = mvp !*! correctionMatrixForFont' font
+    let dims = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
+    let correctedMVP      = mvp !*! correctionMatrixForFont' font dims 1
+                                        
 
     uniformM44 uMVP     correctedMVP
     uniformI   uTexture 0
@@ -108,6 +123,8 @@ mainLoop win events planeShape = do
         model44      = mkTransformation 1 textPos
         view44       = lookAt (V3 0 0 0) textPos (V3 0 1 0)
         mvp          = projection44 !*! view44 !*! model44
+        mvpX         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 1 0.002 1)
+        mvpY         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 0.002 1 1)
 
     
     withShape planeShape $ do
@@ -115,13 +132,18 @@ mainLoop win events planeShape = do
         uniformV4 uColor (V4 0.2 0.5 0.2 1)
         uniformM44 uMVP mvp
         drawShape
+        uniformV4 uColor (V4 0.2 0.0 0.2 1)
+        uniformM44 uMVP mvpX
+        drawShape
+        uniformM44 uMVP mvpY
+        drawShape
 
     -- Leaving this here so we can test updating chars later
-    txrTextBuffer .= textBufferFromString frameChars
-    put =<< updateMetrics =<< get
+    --txrTextBuffer .= textBufferFromString frameChars
+    --put =<< updateMetrics =<< get
     
     textRenderer <- use id
-    renderText textRenderer mvp (V3 1 1 1)
+    renderText' textRenderer mvp (V3 1 1 1)
     
     swapBuffers win
 
