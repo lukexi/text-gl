@@ -36,7 +36,7 @@ main = do
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
     -- let fileName = "test/TestBuffer.hs"
-    let fileName = "test/TODO.txt"
+    let fileName = "TODO.txt"
     initialState <- textRendererFromFile font fileName WatchFile
 
     

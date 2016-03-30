@@ -68,6 +68,20 @@ test-suite basic
     mtl,
     bytestring, text, linear, time, random, glfw-pal, halive, lens-extra
 
+test-suite scaling
+  main-is:             TestScaling.hs
+  hs-source-dirs:      test
+  type:                exitcode-stdio-1.0
+  default-language:    Haskell2010
+  ghc-options:         -O2 -Wall -threaded -rtsopts
+  build-depends:
+    base,
+    freetype-gl-mini,
+    gl,
+    gl-pal,
+    mtl,
+    bytestring, text, linear, time, random, glfw-pal, halive, lens-extra
+
 test-suite buffer
   main-is:             TestBuffer.hs
   hs-source-dirs:      test
