@@ -1,21 +1,34 @@
 
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+
 import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
 
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Lens.Extra
 import System.Random
 import Halive.Utils
+
+
+data Uniforms = Uniforms 
+  { uMVP   :: UniformLocation (M44 GLfloat) 
+  , uColor :: UniformLocation (V4 GLfloat) 
+  } deriving Data
 
 -------------------------------------------------------------
 -- A test of scaling text to fit a container
 -------------------------------------------------------------
 
-frameChars = "Hello My Dolly" 
+frameChars = unlines
+    [ "Hello My Dolly"
+    , "Hello My Baby" 
+    , "Hello My String Time Gal" 
+    ] 
 
 main :: IO ()
 main = do
@@ -26,17 +39,20 @@ main = do
     glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
     font      <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 50 glyphProg
 
+    shader     <- createShaderProgram "test/geo.vert" "test/geo.frag"
+    planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
+    planeShape <- makeShape planeGeo shader
+
     glClearColor 0 0.1 0.1 1
     -- glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
     glGetErrors
 
-    let frameChars = asciiChars ++ ['\n'] ++ asciiChars
     textRenderer <- createTextRenderer font (textBufferFromString frameChars)
 
     void . flip runStateT textRenderer . whileWindow win $ 
-        mainLoop win events 
+        mainLoop win events planeShape
 
 correctionMatrixForFont' :: Fractional a => Font -> M44 a
 correctionMatrixForFont' Font{..} = correctedMVP
@@ -73,8 +89,8 @@ renderText' textRenderer mvp color = do
     return ()
 
 
-mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> m ()
-mainLoop win events = do
+mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> Shape Uniforms -> m ()
+mainLoop win events planeShape = do
     --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
     processEvents events $ closeOnEscape win
@@ -94,6 +110,12 @@ mainLoop win events = do
         mvp          = projection44 !*! view44 !*! model44
 
     
+    withShape planeShape $ do
+        Uniforms{..} <- asks sUniforms
+        uniformV4 uColor (V4 0.2 0.5 0.2 1)
+        uniformM44 uMVP mvp
+        drawShape
+
     -- Leaving this here so we can test updating chars later
     txrTextBuffer .= textBufferFromString frameChars
     put =<< updateMetrics =<< get
