@@ -62,7 +62,7 @@ mainLoop win events = do
     processEvents events $ \e -> do
         closeOnEscape win e
 
-        handleTextBufferEvent win e id
+        _ <- handleTextBufferEvent win e id
         onMouseDown e $ \_ -> do
             textRenderer <- get
             ray <- cursorPosToWorldRay win projection44 newPose
