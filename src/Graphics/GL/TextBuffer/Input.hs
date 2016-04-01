@@ -40,8 +40,8 @@ textRendererFromFile font filePath watchMode = liftIO $ do
     case watchMode of
         NoWatchFile -> return textRenderer
         WatchFile -> do
-            fileWatcher <- eventListenerForFile filePath
-            return $ textRenderer & txrFileWatcher ?~ fileWatcher
+            fileEventListener <- eventListenerForFile filePath ReadFileOnEvents
+            return $ textRenderer & txrFileEventListener ?~ fileEventListener
 
 -- | Must pass WatchFile to textRendererFromFile to use this
 refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m) 
@@ -50,11 +50,13 @@ refreshTextRendererFromFile rendererLens = do
     
     mTextRenderer <- preuse rendererLens
     forM_ mTextRenderer $ \textRenderer -> 
-        forM_ (textRenderer ^. txrFileWatcher) $ \fileWatcher -> 
-            forM_ (bufPath (textRenderer ^. txrTextBuffer)) $ \filePath -> 
-                onFileEvent fileWatcher $ do
-                    text <- liftIO $ readFile filePath
-                    setTextRendererText rendererLens text
+        forM_ (textRenderer ^. txrFileEventListener) $ \fileEventListener -> 
+            forM_ (bufPath (textRenderer ^. txrTextBuffer)) $ \filePath -> do
+                tryReadTChanIO (felEventTChan fileEventListener) >>= \case
+                    Just (Right newText) -> setTextRendererText rendererLens newText
+                    Just (Left  _) -> liftIO (putStrLn "Couldn't refresh text renderer, FileEventListener wasn't configured to read the file")
+                    Nothing -> return () 
+                    
 
 setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
                     => Traversal' s TextRenderer -> String -> m ()

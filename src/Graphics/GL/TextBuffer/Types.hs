@@ -40,6 +40,6 @@ data TextRenderer = TextRenderer
     , _txrTextBuffer   :: !TextBuffer
     , _txrTextMetrics  :: !TextMetrics
     , _txrDragRoot     :: !(Maybe Cursor)
-    , _txrFileWatcher  :: !(Maybe FileEventChan)
+    , _txrFileEventListener  :: !(Maybe FileEventListener)
     }
 makeLenses ''TextRenderer

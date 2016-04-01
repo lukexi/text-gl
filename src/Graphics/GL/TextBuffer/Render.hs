@@ -11,7 +11,6 @@ import Control.Monad.Trans
 import Control.Monad
 
 import Graphics.GL.Freetype.Types
-import Graphics.GL.Freetype.Font
 import Graphics.GL.Freetype.API
 import Graphics.GL.TextBuffer.Metrics
 import Graphics.GL.TextBuffer.TextBuffer
@@ -49,7 +48,7 @@ createTextRenderer font textBuffer = do
         , _txrOffsetBuffer       = glyphOffsetBuffer
         , _txrFont               = font
         , _txrDragRoot           = Nothing
-        , _txrFileWatcher        = Nothing
+        , _txrFileEventListener        = Nothing
         }
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer 
@@ -132,7 +131,7 @@ correctionMatrixForTextRenderer textRenderer =
 renderText :: (MonadIO m) 
            => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
 renderText textRenderer mvp color = do
-    let font@Font{..}     = textRenderer ^. txrFont
+    let Font{..}          = textRenderer ^. txrFont
         TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
         rendererVAO       = textRenderer ^. txrVAO
