@@ -35,8 +35,8 @@ data TextMetrics = TextMetrics
 data TextRenderer = TextRenderer
     { _txrFont         :: !Font
     , _txrVAO          :: !VertexArrayObject
-    , _txrIndexBuffer  :: !ArrayBuffer
-    , _txrOffsetBuffer :: !ArrayBuffer
+    , _txrIndexBuffer  :: !(ArrayBuffer GLint)
+    , _txrOffsetBuffer :: !(ArrayBuffer (V2 GLfloat))
     , _txrTextBuffer   :: !TextBuffer
     , _txrTextMetrics  :: !TextMetrics
     , _txrDragRoot     :: !(Maybe Cursor)

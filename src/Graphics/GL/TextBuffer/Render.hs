@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Graphics.GL.TextBuffer.Render where
 
 import Data.Foldable
@@ -7,7 +8,7 @@ import Data.Foldable
 import Graphics.GL.Pal hiding (trace)
 import Control.Lens.Extra
 
-import Control.Monad.Trans
+import Control.Monad.Reader
 import Control.Monad
 
 import Graphics.GL.Freetype.Types
@@ -23,19 +24,19 @@ createTextRenderer font textBuffer = do
 
     -- Reserve space for 10000 characters
     glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..10000] :: [GLint])
-    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (concatMap toList (replicate 10000 (0::V2 GLfloat)))
+    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate 10000 (0::V2 GLfloat))
 
     withVAO glyphVAO $ do
-      withArrayBuffer glyphIndexBuffer $ do
-        let name = "aInstanceGlyphIndex"
-        attribute <- getShaderAttribute shader name
-        assignIntegerAttribute shader name GL_INT 1
-        vertexAttribDivisor attribute 1
-      withArrayBuffer glyphOffsetBuffer $ do
-        let name = "aInstanceCharacterOffset"
-        attribute <- getShaderAttribute shader name
-        assignFloatAttribute shader name GL_FLOAT 2
-        vertexAttribDivisor attribute 1
+        withArrayBuffer glyphIndexBuffer $ do
+            let name = "aInstanceGlyphIndex"
+            attribute <- getShaderAttribute shader name
+            assignIntegerAttribute shader name GL_INT 1
+            vertexAttribDivisor attribute 1
+        withArrayBuffer glyphOffsetBuffer $ do
+            let name = "aInstanceCharacterOffset"
+            attribute <- getShaderAttribute shader name
+            assignFloatAttribute shader name GL_FLOAT 2
+            vertexAttribDivisor attribute 1
 
     updateMetrics $ TextRenderer
         { _txrTextBuffer         = textBuffer
@@ -48,7 +49,7 @@ createTextRenderer font textBuffer = do
         , _txrOffsetBuffer       = glyphOffsetBuffer
         , _txrFont               = font
         , _txrDragRoot           = Nothing
-        , _txrFileEventListener        = Nothing
+        , _txrFileEventListener  = Nothing
         }
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer 
@@ -57,7 +58,7 @@ updateMetrics :: MonadIO m => TextRenderer -> m TextRenderer
 updateMetrics textRenderer@TextRenderer{..} = do
     let textMetrics@TextMetrics{..} = calculateMetrics _txrTextBuffer _txrFont
     bufferSubData _txrIndexBuffer  txmCharIndices
-    bufferSubData _txrOffsetBuffer (concatMap (toList . snd) txmCharOffsets)
+    bufferSubData _txrOffsetBuffer (map snd txmCharOffsets)
     return textRenderer { _txrTextMetrics = textMetrics }
 
 -- | This is quick and dirty.
@@ -128,21 +129,52 @@ correctionMatrixForTextRenderer textRenderer =
 -- All text is rendered centered based on the number of rows and the largest number
 -- of columns. So to choose how many characters you want to be able to fit, you should
 -- scale the text's Model matrix by 1/numChars.
-renderText :: (MonadIO m) 
-           => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
-renderText textRenderer mvp color = do
-    let Font{..}          = textRenderer ^. txrFont
-        TextMetrics{..}   = textRenderer ^. txrTextMetrics
-        GlyphUniforms{..} = fntUniforms
-        rendererVAO       = textRenderer ^. txrVAO
-    useProgram fntShader
-    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
+--renderText :: (MonadIO m) 
+--           => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
+--renderText textRenderer mvp color = do
+--    let Font{..}          = textRenderer ^. txrFont
+--        TextMetrics{..}   = textRenderer ^. txrTextMetrics
+--        GlyphUniforms{..} = fntUniforms
+--        rendererVAO       = textRenderer ^. txrVAO
+--    useProgram fntShader
+--    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
-    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
+--    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
                                         
 
-    uniformM44 uMVP     correctedMVP
+--    uniformM44 uMVP     correctedMVP
+--    uniformI   uTexture 0
+--    uniformV3  uColor   color
+
+--    let numVertices  = 4
+--        numInstances = fromIntegral txmNumChars
+--    withVAO rendererVAO $ 
+--        glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
+--    return ()
+
+renderText textRenderer mvp color = withSharedFont (textRenderer ^. txrFont) $ 
+    renderTextOfSameFont textRenderer mvp color
+
+-- | Lets us share the calls to useProgram etc. among a bunch of text renderings
+withSharedFont font@Font{..} renderActions = do
+    let GlyphUniforms{..} = fntUniforms
+    useProgram fntShader
+    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
     uniformI   uTexture 0
+
+    runReaderT renderActions font 
+
+renderTextOfSameFont :: (MonadIO m, MonadReader Font m) 
+                     => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
+renderTextOfSameFont textRenderer mvp color = do
+    Font{..} <- ask
+    let TextMetrics{..}   = textRenderer ^. txrTextMetrics
+        GlyphUniforms{..} = fntUniforms
+        rendererVAO       = textRenderer ^. txrVAO
+    
+    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
+
+    uniformM44 uMVP     correctedMVP
     uniformV3  uColor   color
 
     let numVertices  = 4
