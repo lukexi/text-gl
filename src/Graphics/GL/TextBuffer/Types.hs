@@ -33,13 +33,14 @@ data TextMetrics = TextMetrics
     }
 
 data TextRenderer = TextRenderer
-    { _txrFont         :: !Font
-    , _txrVAO          :: !VertexArrayObject
-    , _txrIndexBuffer  :: !(ArrayBuffer GLint)
-    , _txrOffsetBuffer :: !(ArrayBuffer (V2 GLfloat))
-    , _txrTextBuffer   :: !TextBuffer
-    , _txrTextMetrics  :: !TextMetrics
-    , _txrDragRoot     :: !(Maybe Cursor)
+    { _txrFont               :: !Font
+    , _txrVAO                :: !VertexArrayObject
+    , _txrIndexBuffer        :: !(ArrayBuffer GLint)
+    , _txrOffsetBuffer       :: !(ArrayBuffer (V2 GLfloat))
+    , _txrCorrectionM44      :: !(M44 GLfloat)
+    , _txrTextBuffer         :: !TextBuffer
+    , _txrTextMetrics        :: !TextMetrics
+    , _txrDragRoot           :: !(Maybe Cursor)
     , _txrFileEventListener  :: !(Maybe FileEventListener)
     }
 makeLenses ''TextRenderer

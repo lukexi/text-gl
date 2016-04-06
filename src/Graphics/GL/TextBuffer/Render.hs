@@ -3,13 +3,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Graphics.GL.TextBuffer.Render where
 
-import Data.Foldable
-
 import Graphics.GL.Pal hiding (trace)
 import Control.Lens.Extra
 
 import Control.Monad.Reader
-import Control.Monad
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
@@ -45,6 +42,7 @@ createTextRenderer font textBuffer = do
                                     , txmCharOffsets = mempty
                                     , txmNumChars = 0 }
         , _txrVAO                = glyphVAO
+        , _txrCorrectionM44      = identity
         , _txrIndexBuffer        = glyphIndexBuffer
         , _txrOffsetBuffer       = glyphOffsetBuffer
         , _txrFont               = font
@@ -59,7 +57,11 @@ updateMetrics textRenderer@TextRenderer{..} = do
     let textMetrics@TextMetrics{..} = calculateMetrics _txrTextBuffer _txrFont
     bufferSubData _txrIndexBuffer  txmCharIndices
     bufferSubData _txrOffsetBuffer (map snd txmCharOffsets)
-    return textRenderer { _txrTextMetrics = textMetrics }
+
+    let newTextRenderer  = textRenderer { _txrTextMetrics = textMetrics }
+        newCorrectionM44 = correctionMatrixForTextRenderer newTextRenderer
+        newTextRenderer' = newTextRenderer { _txrCorrectionM44 = newCorrectionM44 }
+    return newTextRenderer'
 
 -- | This is quick and dirty.
 -- We should keep the bounding boxes of the characters during
@@ -129,33 +131,12 @@ correctionMatrixForTextRenderer textRenderer =
 -- All text is rendered centered based on the number of rows and the largest number
 -- of columns. So to choose how many characters you want to be able to fit, you should
 -- scale the text's Model matrix by 1/numChars.
---renderText :: (MonadIO m) 
---           => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
---renderText textRenderer mvp color = do
---    let Font{..}          = textRenderer ^. txrFont
---        TextMetrics{..}   = textRenderer ^. txrTextMetrics
---        GlyphUniforms{..} = fntUniforms
---        rendererVAO       = textRenderer ^. txrVAO
---    useProgram fntShader
---    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
-
---    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
-                                        
-
---    uniformM44 uMVP     correctedMVP
---    uniformI   uTexture 0
---    uniformV3  uColor   color
-
---    let numVertices  = 4
---        numInstances = fromIntegral txmNumChars
---    withVAO rendererVAO $ 
---        glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
---    return ()
-
+renderText :: MonadIO m => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
 renderText textRenderer mvp color = withSharedFont (textRenderer ^. txrFont) $ 
     renderTextOfSameFont textRenderer mvp color
 
 -- | Lets us share the calls to useProgram etc. among a bunch of text renderings
+withSharedFont :: MonadIO m => Font -> ReaderT Font m b -> m b
 withSharedFont font@Font{..} renderActions = do
     let GlyphUniforms{..} = fntUniforms
     useProgram fntShader
@@ -171,8 +152,9 @@ renderTextOfSameFont textRenderer mvp color = do
     let TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
         rendererVAO       = textRenderer ^. txrVAO
+        correctionM44     = textRenderer ^. txrCorrectionM44
     
-    let correctedMVP      = mvp !*! correctionMatrixForTextRenderer textRenderer
+    let correctedMVP      = mvp !*! correctionM44
 
     uniformM44 uMVP     correctedMVP
     uniformV3  uColor   color

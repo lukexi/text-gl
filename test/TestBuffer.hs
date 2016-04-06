@@ -70,8 +70,8 @@ mainLoop win events = do
                 Just cursor -> put =<< beginDrag cursor textRenderer
                 Nothing -> return ()
         onCursor e $ \_ _ -> do
-            textRenderer <- get
             ray <- cursorPosToWorldRay win projection44 newPose
+            let _ = ray :: Ray GLfloat
             case rayToTextRendererCursor ray textRenderer model44 of
                 Just cursor -> put =<< continueDrag cursor textRenderer
                 Nothing -> return ()
