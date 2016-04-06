@@ -51,11 +51,10 @@ refreshTextRendererFromFile rendererLens = do
     mTextRenderer <- preuse rendererLens
     forM_ mTextRenderer $ \textRenderer -> 
         forM_ (textRenderer ^. txrFileEventListener) $ \fileEventListener -> 
-            forM_ (bufPath (textRenderer ^. txrTextBuffer)) $ \filePath -> do
-                tryReadTChanIO (felEventTChan fileEventListener) >>= \case
-                    Just (Right newText) -> setTextRendererText rendererLens newText
-                    Just (Left  _) -> liftIO (putStrLn "Couldn't refresh text renderer, FileEventListener wasn't configured to read the file")
-                    Nothing -> return () 
+            tryReadTChanIO (felEventTChan fileEventListener) >>= \case
+                Just (Right newText) -> setTextRendererText rendererLens newText
+                Just (Left  _) -> liftIO (putStrLn "Couldn't refresh text renderer, FileEventListener wasn't configured to read the file")
+                Nothing -> return () 
                     
 
 setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
