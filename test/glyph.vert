@@ -74,8 +74,6 @@ void main() {
                                 + aInstanceCharacterOffset.xyz;
         
         gl_Position = mvp * vec4(positionScaled, 1.0);
-    } else {
-
     }
 }
 

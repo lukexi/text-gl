@@ -9,10 +9,16 @@ import Graphics.GL.TextBuffer.Types
 import Graphics.GL.TextBuffer.TextBuffer
 import qualified Data.Sequence as Seq
 
+selectionZOffset :: Float
 selectionZOffset = -0.01
+
+cursorZOffset :: Float
 cursorZOffset = 0.01
 
+cursorColorMode :: Float
 cursorColorMode    = -1
+
+selectionColorMode :: Float
 selectionColorMode = 1
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer
@@ -57,6 +63,16 @@ calculateMetrics textBuffer@TextBuffer{..} Font{..} =
         }
 
 
+renderChar :: TextBuffer
+           -> Float
+           -> (Char -> Glyph)
+           -> Glyph
+           -> Glyph
+           -> LineNum
+           -> (Float, Maybe Char, [GLint], [(Cursor, V4 Float)])
+           -> ColNum
+           -> Char
+           -> (Float, Maybe Char, [GLint], [(Cursor, V4 Float)])
 renderChar TextBuffer{..} charYOffset glyphForChar blockGlyph cursorGlyph lineNum (lastXOffset, maybeLastChar, indicesC, offsetsC) colNum character =
       -- Render newlines as spaces
     let glyph   = glyphForChar character
