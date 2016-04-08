@@ -69,7 +69,7 @@ updateMetrics textRenderer@TextRenderer{..} = do
 -- We currently use the point size which is quite wrong
 rayToTextRendererCursor :: Ray Float -> TextRenderer -> M44 Float -> (Maybe Cursor)
 rayToTextRendererCursor ray textRenderer model44 = 
-    let textModel44   = model44 !*! correctionMatrixForTextRenderer textRenderer
+    let textModel44   = model44 !*! textRenderer ^. txrCorrectionM44
         font          = textRenderer ^. txrFont
         aabb          = (0, V3 1 (-1) 0) -- Is this right??
         mIntersection = rayOBBIntersection ray aabb textModel44
