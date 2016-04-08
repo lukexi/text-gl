@@ -34,6 +34,7 @@ data GlyphUniforms = GlyphUniforms
   { uMVP             :: UniformLocation (M44 GLfloat)
   , uTexture         :: UniformLocation GLint
   , uColor           :: UniformLocation (V3 GLfloat)
+  , uTime            :: UniformLocation GLfloat
   } deriving (Data, Show)
 
 data Font = Font 
