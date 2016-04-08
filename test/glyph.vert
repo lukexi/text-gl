@@ -44,6 +44,7 @@ mat4 translateMatrix(vec3 t) {
 }
 
 void main() {
+    mat4 mvp = uProjectionView * uModel; 
 
     Character character = characters[aInstanceGlyphIndex];
     
@@ -51,7 +52,6 @@ void main() {
     vec3 position = vec3(posCoords.xy,0.0) + aInstanceCharacterOffset.xyz;
     vec2 texCoord = posCoords.zw;
     
-    mat4 mvp = uProjectionView * uModel; 
     vTexCoord = texCoord;
 
     vColor = vec3(aInstanceCharacterOffset.w,1.0,1.0);

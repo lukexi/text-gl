@@ -65,7 +65,8 @@ mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> Shape 
 mainLoop win events planeShape = do
     --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
-    processEvents events $ closeOnEscape win
+    es <- gatherEvents events
+    forM_ es $ closeOnEscape win
 
     -- Update the viewport and projection
     (x,y,w,h) <- getWindowViewport win
@@ -79,6 +80,7 @@ mainLoop win events planeShape = do
     let textPos      = V3 0 0 (-1)
         model44      = mkTransformation 1 textPos
         view44       = lookAt (V3 0 0 0) textPos (V3 0 1 0)
+        projView44   = projection44 !*! view44
         mvp          = projection44 !*! view44 !*! model44
         mvpX         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 1 0.002 1)
         mvpY         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 0.002 1 1)
@@ -100,7 +102,7 @@ mainLoop win events planeShape = do
     --put =<< updateMetrics =<< get
     
     textRenderer <- use id
-    renderText textRenderer mvp (V3 1 1 1)
+    renderText textRenderer projView44 model44
     
     swapBuffers win
 

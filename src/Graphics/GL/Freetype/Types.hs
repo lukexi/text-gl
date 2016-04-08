@@ -33,7 +33,7 @@ getGlyphKerning glyph character = unsafePerformIO (getGlyphKerningIO (glyGlyphPt
 data GlyphUniforms = GlyphUniforms
   { uProjectionView  :: UniformLocation (M44 GLfloat)
   , uTexture         :: UniformLocation GLint
-  , uModelM44        :: UniformLocation (M44 GLfloat)
+  , uModel           :: UniformLocation (M44 GLfloat)
   , uTime            :: UniformLocation GLfloat
   } deriving (Data, Show)
 

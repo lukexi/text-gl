@@ -52,7 +52,7 @@ mainLoop win winEvents = do
     -- glGetErrors
 
     let modelM44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 0 0 (-1))
-                         !*! scaleMatrix (1/50) -- ~50 characters per GL unit
+                        !*! scaleMatrix (1/50) -- ~50 characters per GL unit
         viewM44  = viewMatrixFromPose newPose
         projViewM44 = projM44 !*! viewM44
 

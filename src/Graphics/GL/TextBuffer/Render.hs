@@ -164,7 +164,7 @@ renderTextOfSameFont textRenderer modelM44 = do
         TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
     
-    uniformM44 uModelM44 modelM44
+    uniformM44 uModel modelM44
 
     let numVertices  = 4
         numInstances = fromIntegral txmNumChars
