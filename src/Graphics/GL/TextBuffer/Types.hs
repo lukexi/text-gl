@@ -28,7 +28,7 @@ data TextBuffer = TextBuffer
 
 data TextMetrics = TextMetrics
     { txmCharIndices :: ![GLint]
-    , txmCharOffsets :: ![(Cursor, V2 GLfloat)]
+    , txmCharOffsets :: ![(Cursor, V4 GLfloat)]
     , txmNumChars    :: !Int
     }
 
@@ -36,7 +36,7 @@ data TextRenderer = TextRenderer
     { _txrFont               :: !Font
     , _txrVAO                :: !VertexArrayObject
     , _txrIndexBuffer        :: !(ArrayBuffer GLint)
-    , _txrOffsetBuffer       :: !(ArrayBuffer (V2 GLfloat))
+    , _txrOffsetBuffer       :: !(ArrayBuffer (V4 GLfloat))
     , _txrCorrectionM44      :: !(M44 GLfloat)
     , _txrTextBuffer         :: !TextBuffer
     , _txrTextMetrics        :: !TextMetrics

@@ -99,7 +99,7 @@ validateSelection textBuffer@TextBuffer{..} = case bufSelection of
     Nothing -> textBuffer
     Just (cursorBegin, cursorEnd) -> updateCurrentColumn $ textBuffer 
         { bufSelection = Just ( validateCursor cursorBegin textBuffer
-                              , validateCursor cursorEnd   textBuffer)
+                              , validateCursor cursorEnd   textBuffer )
         }
 
 -- | Verify that the given cursor is within the boundaries of the text buffer

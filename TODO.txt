@@ -8,6 +8,8 @@
 
 [ ] Scroll navigation with Vive touchpads. See Windows Phone: https://imgur.com/eX2bfHp
 
+[x] More visible cursor
+
 [x] currentColumn state that is remembered when pressing up and down, and only changed with left and right
 
 [x] Make selection/cursor optional

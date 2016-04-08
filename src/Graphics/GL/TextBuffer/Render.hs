@@ -14,6 +14,8 @@ import Graphics.GL.TextBuffer.Metrics
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Types
 
+
+
 createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
     let shader = fntShader font
@@ -21,7 +23,7 @@ createTextRenderer font textBuffer = do
 
     -- Reserve space for 10000 characters
     glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..10000] :: [GLint])
-    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate 10000 (0::V2 GLfloat))
+    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate 10000 (0::V4 GLfloat))
 
     withVAO glyphVAO $ do
         withArrayBuffer glyphIndexBuffer $ do
@@ -32,7 +34,7 @@ createTextRenderer font textBuffer = do
         withArrayBuffer glyphOffsetBuffer $ do
             let name = "aInstanceCharacterOffset"
             attribute <- getShaderAttribute shader name
-            assignFloatAttribute shader name GL_FLOAT 2
+            assignFloatAttribute shader name GL_FLOAT 4
             vertexAttribDivisor attribute 1
 
     updateMetrics $ TextRenderer
@@ -80,7 +82,7 @@ rayToTextRendererCursor ray textRenderer model44 =
             -- during updateIndicesAndOffsets
             (charW, charH)   = (fntPointSize font * 0.66, fntPointSize font)
             charOffsets      = txmCharOffsets (textRenderer ^. txrTextMetrics)
-            hits = filter (\(_i, V2 x y) -> 
+            hits = filter (\(_i, V4 x y _ _) -> 
                            cursX > x 
                         && cursX < (x + charW) 
                         && cursY > y 
@@ -142,6 +144,8 @@ withSharedFont font@Font{..} renderActions = do
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
     uniformI   uTexture 0
+
+    uniformF uTime =<< getNow
 
     runReaderT renderActions font 
 

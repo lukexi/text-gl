@@ -51,9 +51,9 @@ mainLoop win events = do
     projection44 <- getWindowProjection win 45 0.01 1000
     -- glGetErrors
 
-    let model44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 (-1) (1) (-3))
+    let model44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 0 0 (-1))
         view44  = viewMatrixFromPose newPose
-        mvp     = projection44 !*! view44 !*! model44
+        mvp     = projection44 !*! view44 !*! model44 !*! scaleMatrix (1/50)
 
     -- Update the text renderer if needed from file changes
     refreshTextRendererFromFile id
@@ -70,6 +70,7 @@ mainLoop win events = do
                 Just cursor -> put =<< beginDrag cursor textRenderer
                 Nothing -> return ()
         onCursor e $ \_ _ -> do
+            textRenderer <- get
             ray <- cursorPosToWorldRay win projection44 newPose
             let _ = ray :: Ray GLfloat
             case rayToTextRendererCursor ray textRenderer model44 of
@@ -82,8 +83,6 @@ mainLoop win events = do
 
         -- Render our scene
         
-            
-
         textRenderer <- get
         renderText textRenderer mvp (V3 1 1 1)
         
