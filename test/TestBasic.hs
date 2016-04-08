@@ -40,7 +40,8 @@ mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> m ()
 mainLoop win events = do
     --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
-    processEvents events $ closeOnEscape win
+    es <- gatherEvents events
+    forM_ es $ closeOnEscape win
 
     -- Update the viewport and projection
     (x,y,w,h) <- getWindowViewport win
@@ -54,7 +55,7 @@ mainLoop win events = do
     let textPos      = V3 0 0 (-1)
         model44      = mkTransformation 1 textPos
         view44       = lookAt (V3 0 0 0) textPos (V3 0 1 0)
-        mvp          = projection44 !*! view44 !*! model44
+        projView44   = projection44 !*! view44 
 
     -- Render random characters
     n <- liftIO $ randomRIO (1,50)
@@ -66,7 +67,7 @@ mainLoop win events = do
     put =<< updateMetrics =<< get
     
     textRenderer <- use id
-    renderText textRenderer mvp (V3 1 1 1)
+    renderText textRenderer projView44 model44
     
     swapBuffers win
 

@@ -133,35 +133,38 @@ correctionMatrixForTextRenderer textRenderer =
 -- All text is rendered centered based on the number of rows and the largest number
 -- of columns. So to choose how many characters you want to be able to fit, you should
 -- scale the text's Model matrix by 1/numChars.
-renderText :: MonadIO m => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
-renderText textRenderer mvp color = withSharedFont (textRenderer ^. txrFont) $ 
-    renderTextOfSameFont textRenderer mvp color
+renderText :: MonadIO m => TextRenderer -> M44 GLfloat -> M44 GLfloat  -> m ()
+renderText textRenderer projViewM44 modelM44 = 
+    renderTextPreCorrected textRenderer projViewM44 
+        (modelM44 !*! textRenderer ^. txrCorrectionM44)
+
+renderTextPreCorrected :: MonadIO m => TextRenderer -> M44 GLfloat -> M44 GLfloat -> m ()
+renderTextPreCorrected textRenderer projViewM44 modelM44 = 
+    withSharedFont (textRenderer ^. txrFont) projViewM44 $ 
+        renderTextOfSameFont textRenderer modelM44
 
 -- | Lets us share the calls to useProgram etc. among a bunch of text renderings
-withSharedFont :: MonadIO m => Font -> ReaderT Font m b -> m b
-withSharedFont font@Font{..} renderActions = do
+withSharedFont :: MonadIO m => Font -> M44 GLfloat -> ReaderT Font m b -> m b
+withSharedFont font@Font{..} projViewM44 renderActions = do
     let GlyphUniforms{..} = fntUniforms
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
     uniformI   uTexture 0
 
-    uniformF uTime =<< getNow
+    uniformF   uTime =<< getNow
+    uniformM44 uProjectionView projViewM44
 
     runReaderT renderActions font 
 
 renderTextOfSameFont :: (MonadIO m, MonadReader Font m) 
-                     => TextRenderer -> M44 GLfloat -> V3 GLfloat -> m ()
-renderTextOfSameFont textRenderer mvp color = do
+                     => TextRenderer -> M44 GLfloat -> m ()
+renderTextOfSameFont textRenderer modelM44 = do
     Font{..} <- ask
-    let TextMetrics{..}   = textRenderer ^. txrTextMetrics
+    let rendererVAO       = textRenderer ^. txrVAO
+        TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
-        rendererVAO       = textRenderer ^. txrVAO
-        correctionM44     = textRenderer ^. txrCorrectionM44
     
-    let correctedMVP      = mvp !*! correctionM44
-
-    uniformM44 uMVP     correctedMVP
-    uniformV3  uColor   color
+    uniformM44 uModel modelM44
 
     let numVertices  = 4
         numInstances = fromIntegral txmNumChars

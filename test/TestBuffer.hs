@@ -48,12 +48,13 @@ mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
 mainLoop win events = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
-    projection44 <- getWindowProjection win 45 0.01 1000
+    projM44 <- getWindowProjection win 45 0.01 1000
     -- glGetErrors
 
-    let model44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 0 0 (-1))
-        view44  = viewMatrixFromPose newPose
-        mvp     = projection44 !*! view44 !*! model44 !*! scaleMatrix (1/50)
+    let modelM44 = mkTransformation (axisAngle (V3 0 1 0) 0) (V3 0 0 (-1))
+                        !*! scaleMatrix (1/50) -- ~50 characters per GL unit
+        viewM44  = viewMatrixFromPose newPose
+        projViewM44 = projM44 !*! viewM44
 
     -- Update the text renderer if needed from file changes
     refreshTextRendererFromFile id
@@ -66,15 +67,15 @@ mainLoop win events = do
         _ <- handleTextBufferEvent win e id
         onMouseDown e $ \_ -> do
             textRenderer <- get
-            ray <- cursorPosToWorldRay win projection44 newPose
-            case rayToTextRendererCursor ray textRenderer model44 of
+            ray <- cursorPosToWorldRay win projM44 newPose
+            case rayToTextRendererCursor ray textRenderer modelM44 of
                 Just cursor -> put =<< beginDrag cursor textRenderer
                 Nothing -> return ()
         onCursor e $ \_ _ -> do
             textRenderer <- get
-            ray <- cursorPosToWorldRay win projection44 newPose
+            ray <- cursorPosToWorldRay win projM44 newPose
             let _ = ray :: Ray GLfloat
-            case rayToTextRendererCursor ray textRenderer model44 of
+            case rayToTextRendererCursor ray textRenderer modelM44 of
                 Just cursor -> put =<< continueDrag cursor textRenderer
                 Nothing -> return ()
 
@@ -83,9 +84,8 @@ mainLoop win events = do
         glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
         -- Render our scene
-        
         textRenderer <- get
-        renderText textRenderer mvp (V3 1 1 1)
+        renderText textRenderer projViewM44 modelM44
         
         swapBuffers win
 
