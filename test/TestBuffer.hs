@@ -59,7 +59,8 @@ mainLoop win events = do
     refreshTextRendererFromFile id
 
     -- Get mouse/keyboard/OS events from GLFW
-    processEvents events $ \e -> do
+    es <- gatherEvents events
+    forM_ es $ \e -> do
         closeOnEscape win e
 
         _ <- handleTextBufferEvent win e id
