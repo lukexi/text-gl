@@ -141,7 +141,7 @@ renderText textRenderer projViewM44 modelM44 =
 renderTextPreCorrected :: MonadIO m => TextRenderer -> M44 GLfloat -> M44 GLfloat -> m ()
 renderTextPreCorrected textRenderer projViewM44 modelM44 = 
     withSharedFont (textRenderer ^. txrFont) projViewM44 $ 
-        renderTextOfSameFont textRenderer modelM44
+        renderTextPreCorrectedOfSameFont textRenderer modelM44
 
 -- | Lets us share the calls to useProgram etc. among a bunch of text renderings
 withSharedFont :: MonadIO m => Font -> M44 GLfloat -> ReaderT Font m b -> m b
@@ -156,9 +156,9 @@ withSharedFont font@Font{..} projViewM44 renderActions = do
 
     runReaderT renderActions font 
 
-renderTextOfSameFont :: (MonadIO m, MonadReader Font m) 
-                     => TextRenderer -> M44 GLfloat -> m ()
-renderTextOfSameFont textRenderer modelM44 = do
+renderTextPreCorrectedOfSameFont :: (MonadIO m, MonadReader Font m) 
+                                 => TextRenderer -> M44 GLfloat -> m ()
+renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
     Font{..} <- ask
     let rendererVAO       = textRenderer ^. txrVAO
         TextMetrics{..}   = textRenderer ^. txrTextMetrics
