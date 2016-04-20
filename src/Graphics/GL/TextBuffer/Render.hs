@@ -109,6 +109,9 @@ continueDrag cursor textRenderer = case textRenderer ^. txrDragRoot of
     Just dragRoot -> updateMetrics (textRenderer & txrTextBuffer %~ setSelection newSel)
         where newSel = if cursor > dragRoot then (dragRoot, cursor) else (cursor, dragRoot)
 
+endDrag :: MonadIO m => TextRenderer -> m TextRenderer
+endDrag textRenderer =
+    updateMetrics (textRenderer & txrDragRoot .~ Nothing)
 
 correctionMatrixForTextRenderer :: TextRenderer -> M44 Float
 correctionMatrixForTextRenderer textRenderer = 

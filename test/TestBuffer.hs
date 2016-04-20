@@ -26,9 +26,9 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
-    font      <- createFont fontFile 50 glyphProg
-
+    glyphProg     <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
+    font          <- createFont fontFile 50 glyphProg
+    
     glClearColor 0.1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
 
@@ -78,6 +78,8 @@ mainLoop win events = do
             case rayToTextRendererCursor ray textRenderer modelM44 of
                 Just cursor -> put =<< continueDrag cursor textRenderer
                 Nothing -> return ()
+        onMouseUp e $ \_ -> do
+            put =<< endDrag =<< get 
 
     immutably $ do
         -- Clear the framebuffer

@@ -1,3 +1,4 @@
+[ ] Place cursor at 0 on click
 
 [ ] Scrolling (use fgPointSize * length bufText to find max height)
   [ ] Define maxHeight for text windows and clip outside of it
@@ -5,6 +6,8 @@
 [ ] Move lines up/down
 
 [ ] Ctrl-f/ctrl-b
+
+[ ] Control-enter
 
 [ ] Scroll navigation with Vive touchpads. See Windows Phone: https://imgur.com/eX2bfHp
 
@@ -16,7 +19,7 @@
 
 
 [x] Clickable cursor position (use cursorPos/fgPointSize to find line, then search for character using kerning)
-
+    [ ] Dragging/clicking empty space within text surface (i.e. lines shorter than longest line) should still do something 
 [x] Abstract into MVP + Filename + HasFocus IORef so we can render many of these
 
 [x] Click-drag to select
