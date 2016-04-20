@@ -119,8 +119,8 @@ handleTextBufferEvent win e rendererLens = do
         (isBackspaceChar -> True)                            -> updateBuffer backspace True
         char                                                 -> updateBuffer (insertChar char) True
 
-willSaveTextBuffer :: Monad m => Event -> m Bool
-willSaveTextBuffer e = do
+eventWillSaveTextBuffer :: Event -> Bool
+eventWillSaveTextBuffer e = runIdentity $ do
     commands <- forM keyCommands $ \KeyCommand{..} -> 
         ifKey False e kcmKey (return kcmCausesSave)
     charCommand <- ifChar False e (\_ -> return True)
