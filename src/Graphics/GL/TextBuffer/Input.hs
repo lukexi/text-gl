@@ -23,7 +23,7 @@ import Graphics.GL.TextBuffer.Render
 import Data.Char
 import Control.Concurrent
 import Halive.FileListener
-import Data.IORef
+import Data.Maybe
 
 data FileWatchMode = WatchFile | NoWatchFile deriving (Eq, Show)
 
@@ -82,68 +82,81 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
 
 -- Returns True if the given event caused a save action in the file
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
-                      => Window -> Event -> Traversal' s TextRenderer -> m Bool
+                      => Window -> Event -> Traversal' s TextRenderer -> m ()
 handleTextBufferEvent win e rendererLens = do
-    -- FIXME there's certainly a cleaner way to do this;
-    -- get rid of the onKey___ things and just iterate a list of bindings
-    didSave <- liftIO (newIORef False)
+
     let textBufferLens :: Traversal' s TextBuffer
         textBufferLens = rendererLens . txrTextBuffer
-        --(commandKey, commandModKey, optionModKey) = (Key'LeftSuper, ModKeySuper, ModKeyAlt) -- Mac
-        (commandKey, _commandModKey, optionModKey) = (Key'LeftControl, ModKeyControl, ModKeyAlt) -- Windows
-        -- Continuously save the file
+        
         updateBuffer editAction causesSave = do
             textBufferLens %= editAction
             updateTextBufferMetricsWithLens rendererLens
             when causesSave $ do
-                maybeRenderer <- preuse rendererLens
-                forM_ maybeRenderer $ \renderer -> do
+                mTextBuffer <- preuse textBufferLens
+                forM_ mTextBuffer $ \textBuffer -> do
                     -- Save on a background thread
-                    liftIO . forkIO $ saveTextBuffer (renderer ^. txrTextBuffer)
-                liftIO (writeIORef didSave True)
+                    liftIO . forkIO $ saveTextBuffer textBuffer
+    -- Copy
+    onKeyWithMods e [commandModKey]                Key'C      $ do
+        mTextBuffer <- preuse textBufferLens
+        forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
+    -- Cut
+    onKeyWithMods e [commandModKey]                Key'X      $ do
+        mTextBuffer <- preuse textBufferLens
+        forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
+        updateBuffer backspace True
 
-    commandIsDown <- (== KeyState'Pressed) <$> getKey win commandKey
-    -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
-    if  | commandIsDown -> do
-            -- Manual save (not really necessary!)
-            onKeyDown e Key'S      $ updateBuffer (id) True
-            -- Copy
-            onKeyDown e Key'C      $ do
-                mTextBuffer <- preuse textBufferLens
-                forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
-            -- Cut
-            onKeyDown e Key'X      $ do
-                mTextBuffer <- preuse textBufferLens
-                forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
-                updateBuffer backspace True
-            -- Paste
-            onKeyDown e Key'V      $ do
-                mString <- getClipboardString win
-                forM_ mString (\string -> updateBuffer (insertString string) True)
-            onKeyDown e Key'Z      $ 
-                updateBuffer undo True
-        | otherwise -> do
+    -- Paste
+    onKeyWithMods e [commandModKey]                Key'V      $ do
+        string <- fromMaybe "" <$> getClipboardString win
+        updateBuffer (insertString string) True
 
-            onChar e $ \case 
-                (isBackspaceChar -> True)                            -> updateBuffer backspace True
-                char                                                 -> updateBuffer (insertChar char) True
-            onKeyWithMods e []                          Key'Enter     $ updateBuffer carriageReturn True
-            onKeyWithMods e []                          Key'Backspace $ updateBuffer backspace True
-            onKeyWithMods e []                          Key'Left      $ updateBuffer moveLeft False
-            onKeyWithMods e []                          Key'Right     $ updateBuffer moveRight False
-            onKeyWithMods e []                          Key'Down      $ updateBuffer moveDown False
-            onKeyWithMods e []                          Key'Up        $ updateBuffer moveUp False
+    forM_ keyCommands $ \KeyCommand{..} -> 
+        onKeyWithMods e kcmModKeys kcmKey (updateBuffer kcmAction kcmCausesSave) 
 
-            onKeyWithMods e [optionModKey]              Key'Left      $ updateBuffer moveWordLeft False
-            onKeyWithMods e [optionModKey]              Key'Right     $ updateBuffer moveWordRight False
+    -- Regular character insertion
+    onChar e $ \case 
+        (isBackspaceChar -> True)                            -> updateBuffer backspace True
+        char                                                 -> updateBuffer (insertChar char) True
 
-            onKeyWithMods e [optionModKey, ModKeyShift] Key'Right     $ updateBuffer selectWordRight False
-            onKeyWithMods e [optionModKey, ModKeyShift] Key'Left      $ updateBuffer selectWordLeft False
-
-            onKeyWithMods e [ModKeyShift]               Key'Left      $ updateBuffer selectLeft False
-            onKeyWithMods e [ModKeyShift]               Key'Right     $ updateBuffer selectRight False
-            onKeyWithMods e [ModKeyShift]               Key'Up        $ updateBuffer selectUp False
-            onKeyWithMods e [ModKeyShift]               Key'Down      $ updateBuffer selectDown False
-    liftIO (readIORef didSave)
+willSaveTextBuffer :: Monad m => Event -> m Bool
+willSaveTextBuffer e = do
+    commands <- forM keyCommands $ \KeyCommand{..} -> 
+        ifKey False e kcmKey (return kcmCausesSave)
+    charCommand <- ifChar False e (\_ -> return True)
+    return $ or (charCommand:commands)
 
 
+commandModKey, optionModKey :: ModKey
+--(commandModKey, optionModKey) = (ModKeySuper, ModKeyAlt) -- Mac
+(commandModKey, optionModKey) = (ModKeyControl, ModKeyAlt) -- Windows
+
+type CausesSave = Bool
+data KeyCommand = KeyCommand 
+    { kcmCausesSave :: CausesSave
+    , kcmModKeys    :: [ModKey]
+    , kcmKey        :: Key 
+    , kcmAction     :: (TextBuffer -> TextBuffer)
+    } 
+
+keyCommands :: [KeyCommand]
+keyCommands = 
+    [ KeyCommand False [commandModKey]             Key'C         id -- handled above
+    , KeyCommand True  [commandModKey]             Key'X         id -- handled above
+    , KeyCommand True  [commandModKey]             Key'V         id -- handled above
+    , KeyCommand True  [commandModKey]             Key'Z         undo
+    , KeyCommand True  []                          Key'Enter     carriageReturn 
+    , KeyCommand True  []                          Key'Backspace backspace 
+    , KeyCommand False []                          Key'Left      moveLeft 
+    , KeyCommand False []                          Key'Right     moveRight 
+    , KeyCommand False []                          Key'Down      moveDown 
+    , KeyCommand False []                          Key'Up        moveUp 
+    , KeyCommand False [optionModKey]              Key'Left      moveWordLeft 
+    , KeyCommand False [optionModKey]              Key'Right     moveWordRight 
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight 
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft 
+    , KeyCommand False [ModKeyShift]               Key'Left      selectLeft 
+    , KeyCommand False [ModKeyShift]               Key'Right     selectRight 
+    , KeyCommand False [ModKeyShift]               Key'Up        selectUp 
+    , KeyCommand False [ModKeyShift]               Key'Down      selectDown 
+    ]
