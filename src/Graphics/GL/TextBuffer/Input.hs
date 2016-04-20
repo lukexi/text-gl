@@ -125,25 +125,25 @@ handleTextBufferEvent win e rendererLens = do
         | otherwise -> do
 
             onChar e $ \case 
-                (isBackspaceChar -> True)                        -> updateBuffer backspace True
-                char                                             -> updateBuffer (insertChar char) True
-            onKey         e Key'Enter                             $ updateBuffer carriageReturn True
-            onKey         e Key'Backspace                         $ updateBuffer backspace True
-            onKey         e Key'Left                              $ updateBuffer moveLeft False
-            onKey         e Key'Right                             $ updateBuffer moveRight False
-            onKey         e Key'Down                              $ updateBuffer moveDown False
-            onKey         e Key'Up                                $ updateBuffer moveUp False
+                (isBackspaceChar -> True)                            -> updateBuffer backspace True
+                char                                                 -> updateBuffer (insertChar char) True
+            onKeyWithMods e []                          Key'Enter     $ updateBuffer carriageReturn True
+            onKeyWithMods e []                          Key'Backspace $ updateBuffer backspace True
+            onKeyWithMods e []                          Key'Left      $ updateBuffer moveLeft False
+            onKeyWithMods e []                          Key'Right     $ updateBuffer moveRight False
+            onKeyWithMods e []                          Key'Down      $ updateBuffer moveDown False
+            onKeyWithMods e []                          Key'Up        $ updateBuffer moveUp False
 
-            onKeyWithMods e [optionModKey]   Key'Left             $ updateBuffer moveWordLeft False
-            onKeyWithMods e [optionModKey]   Key'Right            $ updateBuffer moveWordRight False
+            onKeyWithMods e [optionModKey]              Key'Left      $ updateBuffer moveWordLeft False
+            onKeyWithMods e [optionModKey]              Key'Right     $ updateBuffer moveWordRight False
 
-            onKeyWithMods e [optionModKey, ModKeyShift] Key'Right $ updateBuffer selectWordRight False
-            onKeyWithMods e [optionModKey, ModKeyShift] Key'Left  $ updateBuffer selectWordLeft False
+            onKeyWithMods e [optionModKey, ModKeyShift] Key'Right     $ updateBuffer selectWordRight False
+            onKeyWithMods e [optionModKey, ModKeyShift] Key'Left      $ updateBuffer selectWordLeft False
 
-            onKeyWithMods e [ModKeyShift] Key'Left                $ updateBuffer selectLeft False
-            onKeyWithMods e [ModKeyShift] Key'Right               $ updateBuffer selectRight False
-            onKeyWithMods e [ModKeyShift] Key'Up                  $ updateBuffer selectUp False
-            onKeyWithMods e [ModKeyShift] Key'Down                $ updateBuffer selectDown False
+            onKeyWithMods e [ModKeyShift]               Key'Left      $ updateBuffer selectLeft False
+            onKeyWithMods e [ModKeyShift]               Key'Right     $ updateBuffer selectRight False
+            onKeyWithMods e [ModKeyShift]               Key'Up        $ updateBuffer selectUp False
+            onKeyWithMods e [ModKeyShift]               Key'Down      $ updateBuffer selectDown False
     liftIO (readIORef didSave)
 
 

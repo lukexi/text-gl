@@ -74,25 +74,30 @@ newTextBuffer = TextBuffer
     , bufText      = mempty
     , bufPath      = Nothing
     , bufUndo      = Nothing
+    , bufDims      = (0,0)
     }
 
 textBufferWithPath :: FilePath -> String -> TextBuffer
-textBufferWithPath filePath string = newTextBuffer 
-    { bufText = textSeqFromString string
-    , bufPath = Just filePath 
+textBufferWithPath filePath string = (textBufferFromString string) 
+    { bufPath = Just filePath 
     }
 
 textBufferFromString :: String -> TextBuffer
 textBufferFromString string = newTextBuffer
-    { bufText = textSeqFromString string
+    { bufText = textSeq
+    , bufDims = textSeqDimensions textSeq
     } 
+    where textSeq = textSeqFromString string
 
 setTextFromString :: String -> TextBuffer -> TextBuffer 
 setTextFromString string buffer = 
     pushUndo . validateSelection $ 
         buffer
-          { bufText = textSeqFromString string
-          }
+            { bufText = textSeq
+            , bufDims = textSeqDimensions textSeq
+            }
+    where textSeq = textSeqFromString string
+
 
 validateSelection :: TextBuffer -> TextBuffer
 validateSelection textBuffer@TextBuffer{..} = case bufSelection of
@@ -174,6 +179,7 @@ insertTextBuffer :: TextSeq -> TextBuffer -> TextBuffer
 insertTextBuffer textSeq buffer = updateCurrentColumn $ newBuffer
     { bufText      = newText
     , bufSelection = Just (newCursor, newCursor)
+    , bufDims      = textSeqDimensions newText
     }
     where
         newBuffer = pushUndo buffer

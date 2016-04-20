@@ -24,6 +24,7 @@ data TextBuffer = TextBuffer
     , bufText         :: !TextSeq
     , bufPath         :: !(Maybe FilePath)
     , bufUndo         :: !(Maybe TextBuffer)
+    , bufDims         :: !(Int, Int)
     } deriving Show
 
 data TextMetrics = TextMetrics
