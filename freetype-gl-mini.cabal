@@ -66,6 +66,7 @@ library
       Graphics.GL.TextBuffer
       Graphics.GL.TextBuffer.Input
       Graphics.GL.TextBuffer.Metrics
+      Graphics.GL.TextBuffer.Mouse
       Graphics.GL.TextBuffer.Render
       Graphics.GL.TextBuffer.TextBuffer
       Graphics.GL.TextBuffer.Types

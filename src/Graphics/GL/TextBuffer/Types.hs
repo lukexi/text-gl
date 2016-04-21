@@ -43,5 +43,7 @@ data TextRenderer = TextRenderer
     , _txrTextMetrics        :: !TextMetrics
     , _txrDragRoot           :: !(Maybe Cursor)
     , _txrFileEventListener  :: !(Maybe FileEventListener)
+    , _txrScroll             :: !(V2 GLfloat)
+    , _txrScreenSize         :: !(Maybe (V2 Int))
     }
 makeLenses ''TextRenderer

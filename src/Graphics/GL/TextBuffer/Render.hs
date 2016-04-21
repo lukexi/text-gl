@@ -41,9 +41,10 @@ createTextRenderer font textBuffer = do
     updateMetrics $ TextRenderer
         { _txrTextBuffer         = textBuffer
         , _txrTextMetrics        = TextMetrics 
-                                    { txmCharIndices = mempty
-                                    , txmCharOffsets = mempty
-                                    , txmNumChars = 0 }
+                                        { txmCharIndices = mempty
+                                        , txmCharOffsets = mempty
+                                        , txmNumChars = 0 
+                                        }
         , _txrVAO                = glyphVAO
         , _txrCorrectionM44      = identity
         , _txrIndexBuffer        = glyphIndexBuffer
@@ -51,88 +52,77 @@ createTextRenderer font textBuffer = do
         , _txrFont               = font
         , _txrDragRoot           = Nothing
         , _txrFileEventListener  = Nothing
+        , _txrScroll             = V2 0 0
+        , _txrScreenSize         = Nothing
         }
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer 
--- and writes them into the TextRenderer's VertexBuffers
+-- and writes them into the TextRenderer's ArrayBuffers
 updateMetrics :: MonadIO m => TextRenderer -> m TextRenderer
 updateMetrics textRenderer@TextRenderer{..} = do
-    let textMetrics@TextMetrics{..} = calculateMetrics _txrTextBuffer _txrFont
-    bufferSubData _txrIndexBuffer  txmCharIndices
-    bufferSubData _txrOffsetBuffer (map snd txmCharOffsets)
+    
+    let newTextRenderer = textRenderer &~ do
+            txrTextMetrics   .= calculateMetrics (textRenderer ^. txrTextBuffer) (textRenderer ^. txrFont)
+            txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id) 
+            id %= updateScroll
+        newTextMetrics = newTextRenderer ^. txrTextMetrics
+    liftIO . print $ newTextRenderer ^. txrScroll
+    bufferSubData (newTextRenderer ^. txrIndexBuffer)  (txmCharIndices newTextMetrics)
+    bufferSubData (newTextRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets newTextMetrics))
 
-    let newTextRenderer  = textRenderer { _txrTextMetrics = textMetrics }
-        newCorrectionM44 = correctionMatrixForTextRenderer newTextRenderer
-        newTextRenderer' = newTextRenderer { _txrCorrectionM44 = newCorrectionM44 }
-    return newTextRenderer'
+    return newTextRenderer
 
--- | This is quick and dirty.
--- We should keep the bounding boxes of the characters during
--- calculateIndicesAndOffsets, which we should cache in the TextBuffer.
--- We currently use the point size which is quite wrong
-rayToTextRendererCursor :: Ray Float -> TextRenderer -> M44 Float -> (Maybe Cursor)
-rayToTextRendererCursor ray textRenderer model44 = 
-    let textModel44   = model44 !*! textRenderer ^. txrCorrectionM44
-        font          = textRenderer ^. txrFont
-        aabb          = (0, V3 1 (-1) 0) -- Is this right??
-        mIntersection = rayOBBIntersection ray aabb textModel44
-    in join . flip fmap mIntersection $ \intersectionDistance -> 
-        let worldPoint       = projectRay ray intersectionDistance
-            V3 cursX cursY _ = worldPointToModelPoint textModel44 worldPoint
-            -- The width here is a guess; should get this from GlyphMetrics
-            -- during updateIndicesAndOffsets
-            (charW, charH)   = (fntPointSize font * 0.66, fntPointSize font)
-            charOffsets      = txmCharOffsets (textRenderer ^. txrTextMetrics)
-            hits = filter (\(_i, V4 x y _ _) -> 
-                           cursX > x 
-                        && cursX < (x + charW) 
-                        && cursY > y 
-                        && cursY < (y + charH)) 
-                    charOffsets
-        in case hits of
-            ((i, _):_) -> Just i
-            []         -> Nothing
+updateScroll :: TextRenderer -> TextRenderer
+updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to bufSelection) of
+    (Just screenSize, Just (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
+        textRenderer &~ do
+            let V2 screenW screenH = fromIntegral <$> screenSize
+            V2 scrollX scrollY <- use txrScroll
+            when (cursorCol > screenW + scrollX) $ 
+                txrScroll . _x .= -(cursorCol - screenW)
+            when (cursorCol < scrollX) $ 
+                txrScroll . _x .= cursorCol
+            when (cursorLine > screenH + scrollY) $
+                txrScroll . _y .= cursorLine - screenH
+            when (cursorLine < scrollY) $ 
+                txrScroll . _y .= cursorLine
 
-setCursorTextRendererWithRay :: MonadIO m => Ray GLfloat -> TextRenderer -> M44 GLfloat -> m TextRenderer
-setCursorTextRendererWithRay ray textRenderer model44 = 
-    case rayToTextRendererCursor ray textRenderer model44 of
-        Just i  -> updateMetrics (textRenderer & txrTextBuffer %~ moveTo i)
-        Nothing -> return textRenderer
+    _ -> textRenderer
 
-beginDrag :: MonadIO m => Cursor -> TextRenderer -> m TextRenderer
-beginDrag cursor textRenderer = 
-    updateMetrics (textRenderer & txrTextBuffer %~ moveTo cursor
-                                & txrDragRoot ?~ cursor)
-
-continueDrag :: MonadIO m => Cursor -> TextRenderer -> m TextRenderer
-continueDrag cursor textRenderer = case textRenderer ^. txrDragRoot of
-    Nothing -> return textRenderer
-    Just dragRoot -> updateMetrics (textRenderer & txrTextBuffer %~ setSelection newSel)
-        where newSel = if cursor > dragRoot then (dragRoot, cursor) else (cursor, dragRoot)
-
-endDrag :: MonadIO m => TextRenderer -> m TextRenderer
-endDrag textRenderer =
-    updateMetrics (textRenderer & txrDragRoot .~ Nothing)
 
 correctionMatrixForTextRenderer :: TextRenderer -> M44 Float
 correctionMatrixForTextRenderer textRenderer = 
-            scaleMatrix resolutionCompensationScale 
-        !*! translateMatrix centeringOffset
+            scaleMatrix (realToFrac finalResScale) 
+        !*! translateMatrix (V3 (centeringOffset ^. _x) (centeringOffset ^. _y) 0) 
   where
-    (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
-    (fontWidth, fontHeight) = fontDims (textRenderer ^. txrFont)
-    
-    longestLineWidth = fontWidth  * numCharsX
-    totalLinesHeight = fontHeight * numCharsY
-    lineSpacing      = fontHeight * 0.15 -- 15% default line spacing
-    centeringOffset  = V3 (-longestLineWidth/2) (totalLinesHeight/2 + lineSpacing) 0
-
+    textBuffer = textRenderer ^. txrTextBuffer
+    (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions (bufText textBuffer) 
+    fontDims@(V2 fontWidth fontHeight)                 = fontDimensions (textRenderer ^. txrFont)
+    lineSpacing                                        = fontHeight * 0.15 -- 15% default line spacing
     -- Ensures the characters are always the same 
     -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac (1 / fontHeight)
+    resolutionCompensationScale = 1 / fontHeight
 
-fontDims :: Font -> (Float, Float)
-fontDims Font{..} = (charWidth, charHeight)
+    (centeringOffset, finalResScale) = case textRenderer ^. txrScreenSize of
+        Just screenSize -> (baseOffset + (textRenderer ^. txrScroll * fontDims), resolutionCompensationScale / screenW)
+          where
+            V2 screenW screenH = fromIntegral <$> screenSize
+            baseOffset = V2
+                (-(screenW * fontWidth)  / 2)
+                ( (screenH * fontHeight) / 2 + lineSpacing)
+
+        -- If no explicit target screensize, fall back to centering based on height and width of text
+        Nothing -> (baseOffset, resolutionCompensationScale) 
+          where
+            longestLineWidth = fontWidth  * numCharsX
+            totalLinesHeight = fontHeight * numCharsY
+            baseOffset = V2 
+                (-longestLineWidth/2) 
+                (totalLinesHeight/2 + lineSpacing) 
+
+
+fontDimensions :: Font -> V2 Float
+fontDimensions Font{..} = V2 charWidth charHeight
     where 
         charWidth  = gmAdvanceX . glyMetrics . fntGlyphForChar $ '_'
         charHeight = fntPointSize
@@ -179,3 +169,5 @@ renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
     withVAO rendererVAO $ 
         glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
+
+

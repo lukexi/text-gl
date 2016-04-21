@@ -1,3 +1,5 @@
+[ ] Use psych-text for errors in rumpus
+
 [ ] Place cursor at 0 on first click
 [x] Scrolling (use fgPointSize * length bufText to find max height)
   [x] Define maxHeight for text windows and clip outside of it
@@ -25,6 +27,32 @@
 
 [x] Auto-indent on newline
 
+
+
+
+
+
+
+
+
+
+
+a
+b
+c
+d
+e
+f
+g
+h
+i
+j
+k
+l
+m
+n
+o
+p
 
 
 

@@ -34,8 +34,6 @@ main = do
     glyphProg     <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
     font          <- createFont fontFile 50 glyphProg
 
-    let fontCharWidthPoints = gmAdvanceX (glyMetrics (fntGlyphForChar font $ '_')) / (fntPointSize font)
-
     shader     <- createShaderProgram "test/geo.vert" "test/geo.frag"
     planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
     planeShape <- makeShape planeGeo shader
@@ -50,12 +48,18 @@ main = do
     let fileName = "TODO.txt"
     initialState <- textRendererFromFile font fileName WatchFile
 
-    
     void . flip runStateT initialState $ do
+        -- Move cursor to initial position
         editTextRendererBuffer id $ moveTo (Cursor 0 0)
-        whileWindow win $ 
-            mainLoop win events planeShape fontCharWidthPoints
+        
+        -- Set the screen size
+        txrScreenSize ?= V2 50 50
+        id %=~ updateMetrics
 
+        whileWindow win $ 
+            mainLoop win events planeShape
+
+handleEvents :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> M44 GLfloat -> M44 GLfloat -> m ()
 handleEvents win events projM44 modelM44 = do
     -- Update the text renderer if needed from file changes
     refreshTextRendererFromFile id
@@ -70,8 +74,8 @@ handleEvents win events projM44 modelM44 = do
         return ()
 
 
---mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
-mainLoop win events planeShape fontCharWidthPoints = do
+mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> Shape Uniforms -> m ()
+mainLoop win events planeShape = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
     projM44 <- getWindowProjection win 45 0.01 1000
@@ -82,19 +86,8 @@ mainLoop win events planeShape fontCharWidthPoints = do
         viewM44  = viewMatrixFromPose newPose
         projViewM44 = projM44 !*! viewM44
 
-    textRenderer <- get
     
-    let textBuffer = textRenderer ^. txrTextBuffer
-        numLinesVisible = 50
-        (cols, lines) = bufDims textBuffer 
-        (_, Cursor cursLine cursCol) = getSelection textBuffer 
-        numLines = numLinesVisible
-        scrollLines = fromIntegral cursLine
-        --scrollColumns = -fromIntegral cursCol + 0
-        scrollColumns = fromIntegral cols/5
-        scrollM44 = translateMatrix (V3 (scrollColumns * fontCharWidthPoints) scrollLines 0.01)
-        
-        textModelM44 = modelM44 !*! scaleMatrix (recip (fromIntegral numLines)) !*! scrollM44
+    let textModelM44 = modelM44
 
     handleEvents win events projM44 textModelM44
     
@@ -115,15 +108,15 @@ mainLoop win events planeShape fontCharWidthPoints = do
     withShape planeShape $ do
         Uniforms{..} <- asks sUniforms
         uniformV4 uColor (V4 0.01 0.02 0.05 1)
-        uniformM44 uMVP (projViewM44 !*! modelM44)
+        uniformM44 uMVP (projViewM44 !*! modelM44 !*! translateMatrix (V3 0 0 (-0.01)))
         drawShape
 
     -- Draw clipped thing
     glStencilFunc GL_EQUAL 1 0xFF -- Pass test if stencil value is 1
     glStencilMask 0x00            -- Don't write anything to stencil buffer
 
-    get >>= \textRenderer -> 
-        renderText textRenderer projViewM44 textModelM44
+    textRenderer <- get
+    renderText textRenderer projViewM44 textModelM44
     
     glDisable GL_STENCIL_TEST
     --glEnable GL_DEPTH_TEST

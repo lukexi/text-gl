@@ -17,8 +17,6 @@ import Control.Monad
 import Control.Monad.State
 
 import Graphics.GL.Freetype
-import Linear.Extra
-import Graphics.GL
 import Graphics.GL.TextBuffer.Types
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Render
@@ -63,6 +61,7 @@ editTextRendererBuffer rendererLens action = do
         textBufferLens = rendererLens . txrTextBuffer
     textBufferLens %= action
     rendererLens %=~ updateMetrics
+
 
 setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
                     => Traversal' s TextRenderer -> String -> m ()
@@ -114,22 +113,6 @@ eventWillSaveTextBuffer e = runIdentity $ do
     charCommand <- ifChar False e (\_ -> return True)
     return $ or (charCommand:commands)
 
-handleTextBufferMouseEvent :: forall s m. (MonadState s m, MonadIO m) 
-                           => Window -> Event -> Traversal' s TextRenderer -> M44 GLfloat -> M44 GLfloat -> Pose GLfloat -> m ()
-handleTextBufferMouseEvent win e rendererLens projM44 modelM44 playerPose = do
-    onMouseDown e $ \_ -> rendererLens >>~ \textRenderer -> do
-        ray <- cursorPosToWorldRay win projM44 playerPose
-        case rayToTextRendererCursor ray textRenderer modelM44 of
-            Just cursor -> rendererLens %=~ beginDrag cursor
-            Nothing -> return ()
-    onCursor e $ \_ _ -> rendererLens >>~ \textRenderer -> do
-        ray <- cursorPosToWorldRay win projM44 playerPose
-        let _ = ray :: Ray GLfloat
-        case rayToTextRendererCursor ray textRenderer modelM44 of
-            Just cursor -> rendererLens %=~ continueDrag cursor
-            Nothing -> return ()
-    onMouseUp e $ \_ -> do
-        rendererLens %=~ endDrag
 
 commandModKey, optionModKey :: ModKey
 --(commandModKey, optionModKey) = (ModKeySuper, ModKeyAlt) -- Mac

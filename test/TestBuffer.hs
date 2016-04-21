@@ -9,7 +9,6 @@ import Graphics.UI.GLFW.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
 
-import Control.Lens.Extra
 import Control.Monad
 import Control.Monad.State
 import Halive.Utils
