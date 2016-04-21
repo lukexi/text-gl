@@ -40,8 +40,9 @@ main = do
     initialState <- textRendererFromFile font fileName WatchFile
 
     
-    void . flip runStateT initialState . whileWindow win $ 
-        mainLoop win events
+    void . flip runStateT initialState $ do
+        editTextRendererBuffer id $ moveTo (Cursor 0 0)
+        whileWindow win $ mainLoop win events
 
 
 mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
@@ -65,31 +66,17 @@ mainLoop win events = do
         closeOnEscape win e
 
         _ <- handleTextBufferEvent win e id
-        onMouseDown e $ \_ -> do
-            textRenderer <- get
-            ray <- cursorPosToWorldRay win projM44 newPose
-            case rayToTextRendererCursor ray textRenderer modelM44 of
-                Just cursor -> put =<< beginDrag cursor textRenderer
-                Nothing -> return ()
-        onCursor e $ \_ _ -> do
-            textRenderer <- get
-            ray <- cursorPosToWorldRay win projM44 newPose
-            let _ = ray :: Ray GLfloat
-            case rayToTextRendererCursor ray textRenderer modelM44 of
-                Just cursor -> put =<< continueDrag cursor textRenderer
-                Nothing -> return ()
-        onMouseUp e $ \_ -> do
-            put =<< endDrag =<< get 
+        _ <- handleTextBufferMouseEvent win e id projM44 modelM44 newPose
+        return ()
 
-    immutably $ do
-        -- Clear the framebuffer
-        glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+    -- Clear the framebuffer
+    glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
-        -- Render our scene
-        textRenderer <- get
-        renderText textRenderer projViewM44 modelM44
-        
-        swapBuffers win
+    -- Render our scene
+    textRenderer <- get
+    renderText textRenderer projViewM44 modelM44
+    
+    swapBuffers win
 
 
 

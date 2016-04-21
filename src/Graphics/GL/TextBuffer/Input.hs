@@ -17,6 +17,8 @@ import Control.Monad
 import Control.Monad.State
 
 import Graphics.GL.Freetype
+import Linear.Extra
+import Graphics.GL
 import Graphics.GL.TextBuffer.Types
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Render
@@ -47,31 +49,24 @@ textRendererFromFile font filePath watchMode = liftIO $ do
 refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m) 
                             => Traversal' s TextRenderer -> m ()
 refreshTextRendererFromFile rendererLens = do
-    
-    mTextRenderer <- preuse rendererLens
-    forM_ mTextRenderer $ \textRenderer -> 
+    rendererLens >>~ \textRenderer -> 
         forM_ (textRenderer ^. txrFileEventListener) $ \fileEventListener -> 
             tryReadTChanIO (felEventTChan fileEventListener) >>= \case
                 Just (Right newText) -> setTextRendererText rendererLens newText
                 Just (Left  _) -> liftIO (putStrLn "Couldn't refresh text renderer, FileEventListener wasn't configured to read the file")
-                Nothing -> return () 
-                    
+                Nothing -> return ()
+
+editTextRendererBuffer :: forall s m. (MonadState s m, MonadIO m) 
+                       => Traversal' s TextRenderer -> (TextBuffer -> TextBuffer) -> m ()
+editTextRendererBuffer rendererLens action = do
+    let textBufferLens :: Traversal' s TextBuffer
+        textBufferLens = rendererLens . txrTextBuffer
+    textBufferLens %= action
+    rendererLens %=~ updateMetrics
 
 setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
                     => Traversal' s TextRenderer -> String -> m ()
-setTextRendererText rendererLens text = do
-    let textBufferLens :: Traversal' s TextBuffer
-        textBufferLens = rendererLens . txrTextBuffer
-    textBufferLens %= setTextFromString text
-    updateTextBufferMetricsWithLens rendererLens
-
-updateTextBufferMetricsWithLens :: forall s m. (MonadState s m, MonadIO m) 
-                                 => Traversal' s TextRenderer -> m ()
-updateTextBufferMetricsWithLens rendererLens = do
-    mTextRenderer <- preuse rendererLens
-    forM_ mTextRenderer $ \textRenderer -> do
-        newRenderer <- updateMetrics textRenderer
-        rendererLens .= newRenderer
+setTextRendererText rendererLens text = editTextRendererBuffer rendererLens (setTextFromString text)
 
 saveTextBuffer :: MonadIO m => TextBuffer -> m ()
 saveTextBuffer buffer = liftIO $ case bufPath buffer of
@@ -80,7 +75,6 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
         putStrLn $ "Saving " ++ bufferPath ++ "..."
         writeFile bufferPath (stringFromTextBuffer buffer)
 
--- Returns True if the given event caused a save action in the file
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
                       => Window -> Event -> Traversal' s TextRenderer -> m ()
 handleTextBufferEvent win e rendererLens = do
@@ -89,25 +83,19 @@ handleTextBufferEvent win e rendererLens = do
         textBufferLens = rendererLens . txrTextBuffer
         
         updateBuffer editAction causesSave = do
-            textBufferLens %= editAction
-            updateTextBufferMetricsWithLens rendererLens
-            when causesSave $ do
-                mTextBuffer <- preuse textBufferLens
-                forM_ mTextBuffer $ \textBuffer -> do
-                    -- Save on a background thread
-                    liftIO . forkIO $ saveTextBuffer textBuffer
-    -- Copy
-    onKeyWithMods e [commandModKey]                Key'C      $ do
-        mTextBuffer <- preuse textBufferLens
-        forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
-    -- Cut
-    onKeyWithMods e [commandModKey]                Key'X      $ do
-        mTextBuffer <- preuse textBufferLens
-        forM_ mTextBuffer $ \buffer -> setClipboardString win (selectionFromTextBuffer buffer)
-        updateBuffer backspace True
+            editTextRendererBuffer rendererLens editAction
 
+            when causesSave $ 
+                textBufferLens >>~ void . liftIO . forkIO . saveTextBuffer
+    -- Copy
+    onKeyWithMods e [commandModKey] Key'C $ do
+        textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
+    -- Cut
+    onKeyWithMods e [commandModKey] Key'X $ do
+        textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
+        updateBuffer backspace True
     -- Paste
-    onKeyWithMods e [commandModKey]                Key'V      $ do
+    onKeyWithMods e [commandModKey] Key'V $ do
         string <- fromMaybe "" <$> getClipboardString win
         updateBuffer (insertString string) True
 
@@ -116,8 +104,8 @@ handleTextBufferEvent win e rendererLens = do
 
     -- Regular character insertion
     onChar e $ \case 
-        (isBackspaceChar -> True)                            -> updateBuffer backspace True
-        char                                                 -> updateBuffer (insertChar char) True
+        (isBackspaceChar -> True) -> updateBuffer backspace True
+        char                      -> updateBuffer (insertChar char) True
 
 eventWillSaveTextBuffer :: Event -> Bool
 eventWillSaveTextBuffer e = runIdentity $ do
@@ -126,6 +114,22 @@ eventWillSaveTextBuffer e = runIdentity $ do
     charCommand <- ifChar False e (\_ -> return True)
     return $ or (charCommand:commands)
 
+handleTextBufferMouseEvent :: forall s m. (MonadState s m, MonadIO m) 
+                           => Window -> Event -> Traversal' s TextRenderer -> M44 GLfloat -> M44 GLfloat -> Pose GLfloat -> m ()
+handleTextBufferMouseEvent win e rendererLens projM44 modelM44 playerPose = do
+    onMouseDown e $ \_ -> rendererLens >>~ \textRenderer -> do
+        ray <- cursorPosToWorldRay win projM44 playerPose
+        case rayToTextRendererCursor ray textRenderer modelM44 of
+            Just cursor -> rendererLens %=~ beginDrag cursor
+            Nothing -> return ()
+    onCursor e $ \_ _ -> rendererLens >>~ \textRenderer -> do
+        ray <- cursorPosToWorldRay win projM44 playerPose
+        let _ = ray :: Ray GLfloat
+        case rayToTextRendererCursor ray textRenderer modelM44 of
+            Just cursor -> rendererLens %=~ continueDrag cursor
+            Nothing -> return ()
+    onMouseUp e $ \_ -> do
+        rendererLens %=~ endDrag
 
 commandModKey, optionModKey :: ModKey
 --(commandModKey, optionModKey) = (ModKeySuper, ModKeyAlt) -- Mac
@@ -153,10 +157,10 @@ keyCommands =
     , KeyCommand False []                          Key'Up        moveUp 
     , KeyCommand False [optionModKey]              Key'Left      moveWordLeft 
     , KeyCommand False [optionModKey]              Key'Right     moveWordRight 
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight 
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft 
     , KeyCommand False [ModKeyShift]               Key'Left      selectLeft 
     , KeyCommand False [ModKeyShift]               Key'Right     selectRight 
     , KeyCommand False [ModKeyShift]               Key'Up        selectUp 
     , KeyCommand False [ModKeyShift]               Key'Down      selectDown 
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight 
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft 
     ]

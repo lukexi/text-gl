@@ -1,7 +1,7 @@
 [ ] Place cursor at 0 on first click
 [x] Scrolling (use fgPointSize * length bufText to find max height)
   [x] Define maxHeight for text windows and clip outside of it
------------------------------------------------------
+------------------------------------------
 [ ] Move lines up/down
 
 [ ] Ctrl-f/ctrl-b

@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
 module Graphics.GL.TextBuffer.Render where
 
 import Graphics.GL.Pal hiding (trace)
@@ -118,19 +119,23 @@ correctionMatrixForTextRenderer textRenderer =
             scaleMatrix resolutionCompensationScale 
         !*! translateMatrix centeringOffset
   where
-    (dimX, dimY) = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
-    font = textRenderer ^. txrFont
-    (numCharsX, numCharsY) = (realToFrac dimX, realToFrac dimY)
-    -- Also scale by the width of a wide character
-    charWidthFull = gmAdvanceX (glyMetrics (fntGlyphForChar font $ '_')) * numCharsX
-    charHeightFull = fntPointSize font
-    charHeight = 1 / charHeightFull
-    --charWidth  = 1 / charWidthFull
-    lineSpacingOffset = charHeightFull * 0.15
-    centeringOffset = V3 (-charWidthFull/2) (charHeightFull * numCharsY/2 + lineSpacingOffset) 0
+    (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions . bufText $ textRenderer ^. txrTextBuffer
+    (fontWidth, fontHeight) = fontDims (textRenderer ^. txrFont)
+    
+    longestLineWidth = fontWidth  * numCharsX
+    totalLinesHeight = fontHeight * numCharsY
+    lineSpacing      = fontHeight * 0.15 -- 15% default line spacing
+    centeringOffset  = V3 (-longestLineWidth/2) (totalLinesHeight/2 + lineSpacing) 0
+
     -- Ensures the characters are always the same 
     -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac charHeight
+    resolutionCompensationScale = realToFrac (1 / fontHeight)
+
+fontDims :: Font -> (Float, Float)
+fontDims Font{..} = (charWidth, charHeight)
+    where 
+        charWidth  = gmAdvanceX . glyMetrics . fntGlyphForChar $ '_'
+        charHeight = fntPointSize
 
 -- | RenderText renders at a scale where 1 GL Unit = 1 fullheight character.
 -- All text is rendered centered based on the number of rows and the largest number

@@ -51,8 +51,10 @@ main = do
     initialState <- textRendererFromFile font fileName WatchFile
 
     
-    void . flip runStateT initialState . whileWindow win $ 
-        mainLoop win events planeShape fontCharWidthPoints
+    void . flip runStateT initialState $ do
+        editTextRendererBuffer id $ moveTo (Cursor 0 0)
+        whileWindow win $ 
+            mainLoop win events planeShape fontCharWidthPoints
 
 handleEvents win events projM44 modelM44 = do
     -- Update the text renderer if needed from file changes
@@ -64,21 +66,9 @@ handleEvents win events projM44 modelM44 = do
         closeOnEscape win e
 
         _ <- handleTextBufferEvent win e id
-        onMouseDown e $ \_ -> do
-            textRenderer <- get
-            ray <- cursorPosToWorldRay win projM44 newPose
-            case rayToTextRendererCursor ray textRenderer modelM44 of
-                Just cursor -> put =<< beginDrag cursor textRenderer
-                Nothing -> return ()
-        onCursor e $ \_ _ -> do
-            textRenderer <- get
-            ray <- cursorPosToWorldRay win projM44 newPose
-            let _ = ray :: Ray GLfloat
-            case rayToTextRendererCursor ray textRenderer modelM44 of
-                Just cursor -> put =<< continueDrag cursor textRenderer
-                Nothing -> return ()
-        onMouseUp e $ \_ -> do
-            put =<< endDrag =<< get     
+        _ <- handleTextBufferMouseEvent win e id projM44 modelM44 newPose
+        return ()
+
 
 --mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
 mainLoop win events planeShape fontCharWidthPoints = do

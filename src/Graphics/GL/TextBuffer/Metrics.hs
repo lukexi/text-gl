@@ -84,7 +84,7 @@ renderChar TextBuffer{..} charYOffset glyphForChar blockGlyph cursorGlyph lineNu
         -- Adjust the character's x offset to nestle against the previous character
         charXOffset = lastXOffset + kerning
         nextXOffset = charXOffset + gmAdvanceX (glyMetrics glyph)
-        charCursor = Cursor lineNum colNum
+        charCursor  = Cursor lineNum colNum
         charOffset  = (charCursor, V4 charXOffset charYOffset 0 0)
 
         -- Add the actual character,
@@ -96,11 +96,11 @@ renderChar TextBuffer{..} charYOffset glyphForChar blockGlyph cursorGlyph lineNu
           Just selectionCursor
             -- Add a cursor when line and col num match the (zero-width) cursor
             | charCursor `cursorEqual` selectionCursor ->
-                ( glyIndex cursorGlyph                                     : newIndicesC
+                ( glyIndex cursorGlyph                                                   : newIndicesC
                 , (charCursor, V4 charXOffset charYOffset cursorZOffset cursorColorMode) : newOffsetsC )
             -- Add a selection block when within selection
             | charCursor `cursorWithin` selectionCursor ->
-                ( glyIndex blockGlyph                                            : newIndicesC
+                ( glyIndex blockGlyph                                                          : newIndicesC
                 , (charCursor, V4 charXOffset charYOffset selectionZOffset selectionColorMode) : newOffsetsC )
           _ -> ( newIndicesC, newOffsetsC )
     in (nextXOffset, Just character, newIndicesC', newOffsetsC')
