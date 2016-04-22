@@ -38,14 +38,16 @@ main = do
     planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
     planeShape <- makeShape planeGeo shader
     
-    glClearColor 0.1 0.1 0.1 1
+    glClearColor 0.1 0.5 0.8 1
     glEnable GL_DEPTH_TEST
 
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
     -- let fileName = "test/TestBuffer.hs"
-    let fileName = "TODO.txt"
+    --let fileName = "TODO.txt"
+    --let fileName = "test.txt"
+    let fileName = "src/Graphics/GL/TextBuffer/Render.hs"
     initialState <- textRendererFromFile font fileName WatchFile
 
     void . flip runStateT initialState $ do
@@ -98,6 +100,7 @@ mainLoop win events planeShape = do
     -- Render our scene
     --glDisable GL_DEPTH_TEST
     glEnable GL_STENCIL_TEST
+    glStencilMask 0xFF
     glClear GL_STENCIL_BUFFER_BIT           -- Clear stencil buffer  (0 by default)
     glStencilOp GL_KEEP GL_KEEP GL_REPLACE  -- sfail dpfail dppfail
 

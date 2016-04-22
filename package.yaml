@@ -9,8 +9,8 @@ copyright:    Luke Iannini
 maintainer:   lukexi@me.com
 github:       lukexi/freetype-gl-mini
 
-ghc-prof-options:    "-Wall -O2 -fprof-auto"
-ghc-options:         "-Wall -O2"
+ghc-prof-options:    -Wall -O2 -fprof-auto
+ghc-options:         -Wall -O2
 
 dependencies:
   - base
@@ -50,28 +50,28 @@ library:
 
 tests:
   basic:
-    ghc-options: "-threaded -rtsopts"
+    ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestBasic.hs
     other-modules: []
     dependencies: freetype-gl-mini
   scaling:
-    ghc-options: "-threaded -rtsopts"
+    ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestScaling.hs
     other-modules: []
     dependencies: freetype-gl-mini
   buffer:
-    ghc-options: "-threaded -rtsopts"
+    ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestBuffer.hs
     other-modules: []
     dependencies: freetype-gl-mini
   buffer-scroll:
-    ghc-options: "-threaded -rtsopts"
+    ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestBufferScroll.hs

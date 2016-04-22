@@ -67,6 +67,7 @@ updateMetrics textRenderer@TextRenderer{..} = do
             id %= updateScroll
         newTextMetrics = newTextRenderer ^. txrTextMetrics
     liftIO . print $ newTextRenderer ^. txrScroll
+    liftIO . print $ newTextRenderer ^. txrTextBuffer . to bufSelection
     bufferSubData (newTextRenderer ^. txrIndexBuffer)  (txmCharIndices newTextMetrics)
     bufferSubData (newTextRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets newTextMetrics))
 
@@ -76,14 +77,16 @@ updateScroll :: TextRenderer -> TextRenderer
 updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to bufSelection) of
     (Just screenSize, Just (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
         textRenderer &~ do
-            let V2 screenW screenH = fromIntegral <$> screenSize
+            let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
+            let V2 screenW screenHOrig = fromIntegral <$> screenSize
+                screenH = screenHOrig * (fontWidth / fontHeight)
             V2 scrollX scrollY <- use txrScroll
             when (cursorCol > screenW + scrollX) $ 
-                txrScroll . _x .= -(cursorCol - screenW)
+                txrScroll . _x .= -(cursorCol - (screenW - 2))
             when (cursorCol < scrollX) $ 
                 txrScroll . _x .= cursorCol
             when (cursorLine > screenH + scrollY) $
-                txrScroll . _y .= cursorLine - screenH
+                txrScroll . _y .= cursorLine - (screenH - 2)
             when (cursorLine < scrollY) $ 
                 txrScroll . _y .= cursorLine
 
@@ -99,26 +102,27 @@ correctionMatrixForTextRenderer textRenderer =
     (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions (bufText textBuffer) 
     fontDims@(V2 fontWidth fontHeight)                 = fontDimensions (textRenderer ^. txrFont)
     lineSpacing                                        = fontHeight * 0.15 -- 15% default line spacing
-    -- Ensures the characters are always the same 
-    -- size no matter what point size was specified
-    resolutionCompensationScale = 1 / fontHeight
 
     (centeringOffset, finalResScale) = case textRenderer ^. txrScreenSize of
-        Just screenSize -> (baseOffset + (textRenderer ^. txrScroll * fontDims), resolutionCompensationScale / screenW)
+        Just screenSize -> (offset, scaling)
           where
-            V2 screenW screenH = fromIntegral <$> screenSize
+            V2 screenW screenHOrig = fromIntegral <$> screenSize
+            screenH = screenHOrig * (fontWidth / fontHeight)
             baseOffset = V2
                 (-(screenW * fontWidth)  / 2)
-                ( (screenH * fontHeight) / 2 + lineSpacing)
+                ( (screenH * fontHeight) / 2)
+            scaling = 1 / fontWidth / screenW
+            offset = baseOffset + (textRenderer ^. txrScroll * fontDims)
 
         -- If no explicit target screensize, fall back to centering based on height and width of text
-        Nothing -> (baseOffset, resolutionCompensationScale) 
+        Nothing -> (offset, scaling) 
           where
             longestLineWidth = fontWidth  * numCharsX
             totalLinesHeight = fontHeight * numCharsY
-            baseOffset = V2 
+            offset = V2 
                 (-longestLineWidth/2) 
                 (totalLinesHeight/2 + lineSpacing) 
+            scaling = 1 / fontHeight
 
 
 fontDimensions :: Font -> V2 Float
