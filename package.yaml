@@ -1,13 +1,13 @@
-name:         freetype-gl-mini
+name:         text-gl
 version:      "0.1"
 category:     Graphics
-synopsis:     Text rendering with freetype-gl
-description:  Text rendering with freetype-gl
+synopsis:     Text editing on top of freetype-gl-mini
+description:  Text editing on top of freetype-gl-mini
 license:      BSD3
 author:       Luke Iannini
 copyright:    Luke Iannini
 maintainer:   lukexi@me.com
-github:       lukexi/freetype-gl-mini
+github:       lukexi/text-gl
 
 ghc-prof-options:    -Wall -O2 -fprof-auto
 ghc-options:         -Wall -O2
@@ -25,28 +25,11 @@ dependencies:
   - lens-extra 
   - halive 
   - linear-extra
+  - freetype-gl-mini
 
 library:
   source-dirs:
-    - src
-  c-sources:
-    - cbits/helpers.c
-    - freetype-gl/texture-font.c
-    - freetype-gl/texture-atlas.c
-    - freetype-gl/vector.c
-    - freetype-gl/platform.c
-  include-dirs:
-    - freetype-gl/windows/freetype/
-    - freetype-gl/
-  when:
-    condition: os(windows)
-    then:
-      extra-libraries: freetype-6
-      extra-lib-dirs: c:\msys64\mingw64\bin
-      include-dirs: C:\msys64\mingw64\include
-    else:
-      extra-libraries: freetype
-  
+    - src  
 
 tests:
   basic:
@@ -55,25 +38,25 @@ tests:
       - test
     main: TestBasic.hs
     other-modules: []
-    dependencies: freetype-gl-mini
+    dependencies: text-gl
   scaling:
     ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestScaling.hs
     other-modules: []
-    dependencies: freetype-gl-mini
+    dependencies: text-gl
   buffer:
     ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestBuffer.hs
     other-modules: []
-    dependencies: freetype-gl-mini
+    dependencies: text-gl
   buffer-scroll:
     ghc-options: -threaded -rtsopts
     source-dirs: 
       - test
     main: TestBufferScroll.hs
     other-modules: []
-    dependencies: freetype-gl-mini
+    dependencies: text-gl

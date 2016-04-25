@@ -2,39 +2,30 @@
 --
 -- see: https://github.com/sol/hpack
 
-name:                freetype-gl-mini
-version:             0.1
-synopsis:            Text rendering with freetype-gl
-description:         Text rendering with freetype-gl
-homepage:            https://github.com/lukexi/freetype-gl-mini#readme
-bug-reports:         https://github.com/lukexi/freetype-gl-mini/issues
-license:             BSD3
-license-file:        LICENSE
-author:              Luke Iannini
-maintainer:          lukexi@me.com
-copyright:           Luke Iannini
-category:            Graphics
-build-type:          Simple
-cabal-version:       >= 1.10
+name:           text-gl
+version:        0.1
+synopsis:       Text editing on top of freetype-gl-mini
+description:    Text editing on top of freetype-gl-mini
+category:       Graphics
+homepage:       https://github.com/lukexi/text-gl#readme
+bug-reports:    https://github.com/lukexi/text-gl/issues
+author:         Luke Iannini
+maintainer:     lukexi@me.com
+copyright:      Luke Iannini
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
 
 source-repository head
   type: git
-  location: https://github.com/lukexi/freetype-gl-mini
+  location: https://github.com/lukexi/text-gl
 
 library
   hs-source-dirs:
       src
   ghc-options: -Wall -O2
   ghc-prof-options: -Wall -O2 -fprof-auto
-  include-dirs:
-      freetype-gl/windows/freetype/
-      freetype-gl/
-  c-sources:
-      cbits/helpers.c
-      freetype-gl/texture-font.c
-      freetype-gl/texture-atlas.c
-      freetype-gl/vector.c
-      freetype-gl/platform.c
   build-depends:
       base
     , stm
@@ -48,21 +39,8 @@ library
     , lens-extra
     , halive
     , linear-extra
-  if os(windows)
-    include-dirs:
-        C:\msys64\mingw64\include
-    extra-lib-dirs:
-        c:\msys64\mingw64\bin
-    extra-libraries:
-        freetype-6
-  else
-    extra-libraries:
-        freetype
+    , freetype-gl-mini
   exposed-modules:
-      Graphics.GL.Freetype
-      Graphics.GL.Freetype.API
-      Graphics.GL.Freetype.Font
-      Graphics.GL.Freetype.Types
       Graphics.GL.TextBuffer
       Graphics.GL.TextBuffer.Input
       Graphics.GL.TextBuffer.Metrics
@@ -93,6 +71,7 @@ test-suite basic
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text-gl
   default-language: Haskell2010
 
 test-suite buffer
@@ -116,6 +95,7 @@ test-suite buffer
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text-gl
   default-language: Haskell2010
 
 test-suite buffer-scroll
@@ -139,6 +119,7 @@ test-suite buffer-scroll
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text-gl
   default-language: Haskell2010
 
 test-suite scaling
@@ -162,4 +143,5 @@ test-suite scaling
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text-gl
   default-language: Haskell2010

@@ -15,7 +15,7 @@ import Graphics.GL.TextBuffer.Metrics
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Types
 
-
+import Debug.Trace
 
 createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
@@ -60,35 +60,31 @@ createTextRenderer font textBuffer = do
 -- and writes them into the TextRenderer's ArrayBuffers
 updateMetrics :: MonadIO m => TextRenderer -> m TextRenderer
 updateMetrics textRenderer@TextRenderer{..} = do
-    
     let newTextRenderer = textRenderer &~ do
+            id %= updateScroll
             txrTextMetrics   .= calculateMetrics (textRenderer ^. txrTextBuffer) (textRenderer ^. txrFont)
             txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id) 
-            id %= updateScroll
         newTextMetrics = newTextRenderer ^. txrTextMetrics
-    liftIO . print $ newTextRenderer ^. txrScroll
-    liftIO . print $ newTextRenderer ^. txrTextBuffer . to bufSelection
     bufferSubData (newTextRenderer ^. txrIndexBuffer)  (txmCharIndices newTextMetrics)
     bufferSubData (newTextRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets newTextMetrics))
-
     return newTextRenderer
 
 updateScroll :: TextRenderer -> TextRenderer
 updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to bufSelection) of
     (Just screenSize, Just (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
         textRenderer &~ do
+            V2 scrollX scrollY <- use txrScroll
             let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
             let V2 screenW screenHOrig = fromIntegral <$> screenSize
                 screenH = screenHOrig * (fontWidth / fontHeight)
-            V2 scrollX scrollY <- use txrScroll
-            when (cursorCol > screenW + scrollX) $ 
-                txrScroll . _x .= -(cursorCol - (screenW - 2))
-            when (cursorCol < scrollX) $ 
-                txrScroll . _x .= cursorCol
-            when (cursorLine > screenH + scrollY) $
-                txrScroll . _y .= cursorLine - (screenH - 2)
-            when (cursorLine < scrollY) $ 
-                txrScroll . _y .= cursorLine
+            when (cursorCol > screenW + scrollX - 5) $ 
+                txrScroll . _x .= cursorCol - (screenW - 5)
+            when (cursorLine > screenH + scrollY - 5) $
+                txrScroll . _y .= cursorLine - (screenH - 5)
+            when (cursorCol < scrollX + 5) $ 
+                txrScroll . _x .= cursorCol - 5
+            when (cursorLine < scrollY + 5) $ 
+                txrScroll . _y .= cursorLine - 5
 
     _ -> textRenderer
 
@@ -109,10 +105,11 @@ correctionMatrixForTextRenderer textRenderer =
             V2 screenW screenHOrig = fromIntegral <$> screenSize
             screenH = screenHOrig * (fontWidth / fontHeight)
             baseOffset = V2
-                (-(screenW * fontWidth)  / 2)
-                ( (screenH * fontHeight) / 2)
+                (-screenW / 2)
+                ( screenH / 2)
             scaling = 1 / fontWidth / screenW
-            offset = baseOffset + (textRenderer ^. txrScroll * fontDims)
+            offset = (baseOffset + scroll) * fontDims
+            scroll = textRenderer ^. txrScroll & _x %~ negate
 
         -- If no explicit target screensize, fall back to centering based on height and width of text
         Nothing -> (offset, scaling) 
@@ -173,5 +170,3 @@ renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
     withVAO rendererVAO $ 
         glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
-
-

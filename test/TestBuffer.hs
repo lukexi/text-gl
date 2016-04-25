@@ -14,10 +14,10 @@ import Control.Monad.State
 import Halive.Utils
 
 fontFile :: FilePath
--- fontFile = "freetype-gl/fonts/Vera.ttf"
--- fontFile = "freetype-gl/fonts/Lobster-Regular.ttf"
--- fontFile = "freetype-gl/fonts/LuckiestGuy.ttf"
-fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
+-- fontFile = "test/Vera.ttf"
+-- fontFile = "test/Lobster-Regular.ttf"
+-- fontFile = "test/LuckiestGuy.ttf"
+fontFile = "test/SourceCodePro-Regular.ttf"
 
 
 main :: IO ()

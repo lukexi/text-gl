@@ -23,7 +23,7 @@ data Uniforms = Uniforms
 
 
 fontFile :: FilePath
-fontFile = "freetype-gl/fonts/SourceCodePro-Regular.ttf"
+fontFile = "test/SourceCodePro-Regular.ttf"
 
 
 main :: IO ()
@@ -48,11 +48,12 @@ main = do
     --let fileName = "TODO.txt"
     --let fileName = "test.txt"
     let fileName = "src/Graphics/GL/TextBuffer/Render.hs"
-    initialState <- textRendererFromFile font fileName WatchFile
+    initialState <- reacquire 1 $ do
+        r <- textRendererFromFile font fileName WatchFile
+        -- Move cursor to initial position
+        flip execStateT r (editTextRendererBuffer id $ moveTo (Cursor 0 0))
 
     void . flip runStateT initialState $ do
-        -- Move cursor to initial position
-        editTextRendererBuffer id $ moveTo (Cursor 0 0)
         
         -- Set the screen size
         txrScreenSize ?= V2 50 50
@@ -78,6 +79,7 @@ handleEvents win events projM44 modelM44 = do
 
 mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> Shape Uniforms -> m ()
 mainLoop win events planeShape = do
+    persistState 1
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
     projM44 <- getWindowProjection win 45 0.01 1000
