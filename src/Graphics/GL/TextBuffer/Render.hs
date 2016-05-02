@@ -75,9 +75,9 @@ updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^.
         textRenderer &~ do
             V2 scrollX scrollY <- use txrScroll
             let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
-                V2 screenW screenHOrig = fromIntegral <$> screenSize
-                screenH = screenHOrig * (fontWidth / fontHeight)
-                scrollPad = 2
+                V2 screenW screenHOrig  = fromIntegral <$> screenSize
+                screenH                 = screenHOrig * (fontWidth / fontHeight)
+                scrollPad               = 2
             -- Check for scrolling off the right of the screen
             when (cursorCol > screenW + scrollX - scrollPad) $ 
                 txrScroll . _x .= cursorCol - (screenW - scrollPad)
