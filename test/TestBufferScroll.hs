@@ -100,7 +100,6 @@ mainLoop win events planeShape = do
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
     -- Render our scene
-    --glDisable GL_DEPTH_TEST
     glEnable GL_STENCIL_TEST
     glStencilMask 0xFF
     glClear GL_STENCIL_BUFFER_BIT           -- Clear stencil buffer  (0 by default)
@@ -124,7 +123,6 @@ mainLoop win events planeShape = do
     renderText textRenderer projViewM44 textModelM44
     
     glDisable GL_STENCIL_TEST
-    --glEnable GL_DEPTH_TEST
     swapBuffers win
 
 

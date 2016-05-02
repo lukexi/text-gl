@@ -75,8 +75,8 @@ updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^.
         textRenderer &~ do
             V2 scrollX scrollY <- use txrScroll
             let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
-            let V2 screenW screenHOrig = fromIntegral <$> screenSize
-                screenH = screenHOrig * (fontWidth / fontHeight)
+                V2 screenW screenHOrig  = fromIntegral <$> screenSize
+                screenH                 = screenHOrig * (fontWidth / fontHeight)
             when (cursorCol > screenW + scrollX - 5) $ 
                 txrScroll . _x .= cursorCol - (screenW - 5)
             when (cursorLine > screenH + scrollY - 5) $
