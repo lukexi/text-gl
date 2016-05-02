@@ -70,21 +70,26 @@ updateMetrics textRenderer@TextRenderer{..} = do
     return newTextRenderer
 
 updateScroll :: TextRenderer -> TextRenderer
-updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to bufSelection) of
-    (Just screenSize, Just (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
+updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to getSelection) of
+    (Just screenSize, (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
         textRenderer &~ do
             V2 scrollX scrollY <- use txrScroll
             let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
-            let V2 screenW screenHOrig = fromIntegral <$> screenSize
+                V2 screenW screenHOrig = fromIntegral <$> screenSize
                 screenH = screenHOrig * (fontWidth / fontHeight)
-            when (cursorCol > screenW + scrollX - 5) $ 
-                txrScroll . _x .= cursorCol - (screenW - 5)
-            when (cursorLine > screenH + scrollY - 5) $
-                txrScroll . _y .= cursorLine - (screenH - 5)
-            when (cursorCol < scrollX + 5) $ 
-                txrScroll . _x .= cursorCol - 5
-            when (cursorLine < scrollY + 5) $ 
-                txrScroll . _y .= cursorLine - 5
+                scrollPad = 2
+            -- Check for scrolling off the right of the screen
+            when (cursorCol > screenW + scrollX - scrollPad) $ 
+                txrScroll . _x .= cursorCol - (screenW - scrollPad)
+            -- Check for scrolling off the bottom of the screen
+            when (cursorLine > screenH + scrollY - scrollPad) $
+                txrScroll . _y .= cursorLine - (screenH - scrollPad)
+            -- Check for scrolling off the left of the screen
+            when (cursorCol < scrollX + scrollPad) $ 
+                txrScroll . _x .= cursorCol - scrollPad
+            -- Check for scrolling off the top of the screen
+            when (cursorLine < scrollY + scrollPad) $ 
+                txrScroll . _y .= cursorLine - scrollPad
 
     _ -> textRenderer
 
