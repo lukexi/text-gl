@@ -43,18 +43,27 @@ textRendererFromFile font filePath watchMode = liftIO $ do
             fileEventListener <- eventListenerForFile filePath ReadFileOnEvents
             return $ textRenderer & txrFileEventListener ?~ fileEventListener
 
+renameTextRendererFile :: forall s m. (MonadState s m, MonadIO m)
+                       => FilePath -> Traversal' s TextRenderer -> m ()
+renameTextRendererFile newFileName rendererLens = do
+    rendererLens . txrFileEventListener . traverse >>~ killFileEventListener
+    fileEventListener <- eventListenerForFile newFileName ReadFileOnEvents
+    rendererLens . txrFileEventListener ?= fileEventListener
+
+    rendererLens . txrTextBuffer %= \textBuf -> textBuf { bufPath = Just newFileName }
+
 -- | Must pass WatchFile to textRendererFromFile to use this
-refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m) 
+refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m)
                             => Traversal' s TextRenderer -> m ()
 refreshTextRendererFromFile rendererLens = do
-    rendererLens >>~ \textRenderer -> 
-        forM_ (textRenderer ^. txrFileEventListener) $ \fileEventListener -> 
+    rendererLens >>~ \textRenderer ->
+        forM_ (textRenderer ^. txrFileEventListener) $ \fileEventListener ->
             tryReadTChanIO (felEventTChan fileEventListener) >>= \case
                 Just (Right newText) -> setTextRendererText rendererLens newText
                 Just (Left  _) -> liftIO (putStrLn "Couldn't refresh text renderer, FileEventListener wasn't configured to read the file")
                 Nothing -> return ()
 
-editTextRendererBuffer :: forall s m. (MonadState s m, MonadIO m) 
+editTextRendererBuffer :: forall s m. (MonadState s m, MonadIO m)
                        => Traversal' s TextRenderer -> (TextBuffer -> TextBuffer) -> m ()
 editTextRendererBuffer rendererLens action = do
     let textBufferLens :: Traversal' s TextBuffer
@@ -63,7 +72,7 @@ editTextRendererBuffer rendererLens action = do
     rendererLens %=~ updateMetrics
 
 
-setTextRendererText :: forall s m. (MonadState s m, MonadIO m) 
+setTextRendererText :: forall s m. (MonadState s m, MonadIO m)
                     => Traversal' s TextRenderer -> String -> m ()
 setTextRendererText rendererLens text = editTextRendererBuffer rendererLens (setTextFromString text)
 
@@ -74,17 +83,17 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
         putStrLn $ "Saving " ++ bufferPath ++ "..."
         writeFile bufferPath (stringFromTextBuffer buffer)
 
-handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
+handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m)
                       => Window -> Event -> Traversal' s TextRenderer -> m ()
 handleTextBufferEvent win e rendererLens = do
 
     let textBufferLens :: Traversal' s TextBuffer
         textBufferLens = rendererLens . txrTextBuffer
-        
+
         updateBuffer editAction causesSave = do
             editTextRendererBuffer rendererLens editAction
 
-            when causesSave $ 
+            when causesSave $
                 textBufferLens >>~ void . liftIO . forkIO . saveTextBuffer
     -- Copy
     onKeyWithMods e [commandModKey] Key'C $ do
@@ -98,17 +107,17 @@ handleTextBufferEvent win e rendererLens = do
         string <- fromMaybe "" <$> getClipboardString win
         updateBuffer (insertString string) True
 
-    forM_ keyCommands $ \KeyCommand{..} -> 
-        onKeyWithMods e kcmModKeys kcmKey (updateBuffer kcmAction kcmCausesSave) 
+    forM_ keyCommands $ \KeyCommand{..} ->
+        onKeyWithMods e kcmModKeys kcmKey (updateBuffer kcmAction kcmCausesSave)
 
     -- Regular character insertion
-    onChar e $ \case 
+    onChar e $ \case
         (isBackspaceChar -> True) -> updateBuffer backspace True
         char                      -> updateBuffer (insertChar char) True
 
 eventWillSaveTextBuffer :: Event -> Bool
 eventWillSaveTextBuffer e = runIdentity $ do
-    commands <- forM keyCommands $ \KeyCommand{..} -> 
+    commands <- forM keyCommands $ \KeyCommand{..} ->
         ifKey False e kcmKey (return kcmCausesSave)
     charCommand <- ifChar False e (\_ -> return True)
     return $ or (charCommand:commands)
@@ -119,31 +128,31 @@ commandModKey, optionModKey :: ModKey
 (commandModKey, optionModKey) = (ModKeyControl, ModKeyAlt) -- Windows
 
 type CausesSave = Bool
-data KeyCommand = KeyCommand 
+data KeyCommand = KeyCommand
     { kcmCausesSave :: CausesSave
     , kcmModKeys    :: [ModKey]
-    , kcmKey        :: Key 
+    , kcmKey        :: Key
     , kcmAction     :: (TextBuffer -> TextBuffer)
-    } 
+    }
 
 keyCommands :: [KeyCommand]
-keyCommands = 
+keyCommands =
     [ KeyCommand False [commandModKey]             Key'C         id -- handled above
     , KeyCommand True  [commandModKey]             Key'X         id -- handled above
     , KeyCommand True  [commandModKey]             Key'V         id -- handled above
     , KeyCommand True  [commandModKey]             Key'Z         undo
-    , KeyCommand True  []                          Key'Enter     carriageReturn 
-    , KeyCommand True  []                          Key'Backspace backspace 
-    , KeyCommand False []                          Key'Left      moveLeft 
-    , KeyCommand False []                          Key'Right     moveRight 
-    , KeyCommand False []                          Key'Down      moveDown 
-    , KeyCommand False []                          Key'Up        moveUp 
-    , KeyCommand False [optionModKey]              Key'Left      moveWordLeft 
-    , KeyCommand False [optionModKey]              Key'Right     moveWordRight 
-    , KeyCommand False [ModKeyShift]               Key'Left      selectLeft 
-    , KeyCommand False [ModKeyShift]               Key'Right     selectRight 
-    , KeyCommand False [ModKeyShift]               Key'Up        selectUp 
-    , KeyCommand False [ModKeyShift]               Key'Down      selectDown 
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight 
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft 
+    , KeyCommand True  []                          Key'Enter     carriageReturn
+    , KeyCommand True  []                          Key'Backspace backspace
+    , KeyCommand False []                          Key'Left      moveLeft
+    , KeyCommand False []                          Key'Right     moveRight
+    , KeyCommand False []                          Key'Down      moveDown
+    , KeyCommand False []                          Key'Up        moveUp
+    , KeyCommand False [optionModKey]              Key'Left      moveWordLeft
+    , KeyCommand False [optionModKey]              Key'Right     moveWordRight
+    , KeyCommand False [ModKeyShift]               Key'Left      selectLeft
+    , KeyCommand False [ModKeyShift]               Key'Right     selectRight
+    , KeyCommand False [ModKeyShift]               Key'Up        selectUp
+    , KeyCommand False [ModKeyShift]               Key'Down      selectDown
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight
+    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft
     ]
