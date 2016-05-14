@@ -6,7 +6,7 @@
 module Graphics.GL.TextBuffer.TextBuffer where
 
 import qualified Data.Sequence as Seq
-import Data.Sequence (Seq, ViewL(..), ViewR(..))
+import Data.Sequence (Seq, ViewL(..), ViewR(..), (|>), (<|))
 import Data.Monoid
 import Data.Foldable
 import Data.List hiding (insert)
@@ -25,8 +25,8 @@ cursorEqual :: Cursor -> Selection -> Bool
 cursorEqual cursor (selectionStart, selectionEnd) = cursor == selectionStart && cursor == selectionEnd
 
 cursorWithin :: Cursor -> Selection -> Bool
-cursorWithin (Cursor lineNum colNum) 
-             sel@(Cursor startLineNum startColNum, Cursor endLineNum endColNum) = 
+cursorWithin (Cursor lineNum colNum)
+             sel@(Cursor startLineNum startColNum, Cursor endLineNum endColNum) =
     not (isZeroWidth sel) &&
     (lineNum >= startLineNum && lineNum <= endLineNum) &&
     if
@@ -49,6 +49,27 @@ seqLast seqn = case Seq.viewr seqn of
 seqRange :: (Int, Int) -> Seq a -> Seq a
 seqRange (start, end) = Seq.drop start . Seq.take end
 
+moveSeqRangeLeft :: Int -> Int -> Seq a -> Maybe (Seq a)
+moveSeqRangeLeft startIndex endIndex aSeq =
+    let (begin, middle, end) = divideSeq startIndex endIndex aSeq
+    in case Seq.viewr begin of
+        EmptyR   -> Nothing
+        newBegin :> moved -> Just (newBegin <> middle <> (moved <| end))
+
+moveSeqRangeRight :: Int -> Int -> Seq a -> Maybe (Seq a)
+moveSeqRangeRight startIndex endIndex aSeq =
+    let (begin, middle, end) = divideSeq startIndex endIndex aSeq
+    in case Seq.viewl end of
+        EmptyL          -> Nothing
+        moved :< newEnd -> Just ((begin |> moved) <> middle <> newEnd)
+
+divideSeq :: Int -> Int -> Seq a -> (Seq a, Seq a, Seq a)
+divideSeq startIndex endIndex textSeq = (begin, middle, end)
+  where
+    (begin, rest) = Seq.splitAt startIndex textSeq
+    (middle, end) = Seq.splitAt (endIndex - startIndex) rest
+
+
 textSeqFromString :: String -> TextSeq
 textSeqFromString = Seq.fromList . fmap Seq.fromList . lines . fixup
     -- Fix lines returning [] instead of [""] for an empty string
@@ -68,7 +89,7 @@ textSeqDimensions textSeq = (maximum (length <$> textSeq), length textSeq)
 
 
 newTextBuffer :: TextBuffer
-newTextBuffer = TextBuffer 
+newTextBuffer = TextBuffer
     { bufSelection = Nothing
     , bufColumn    = 1
     , bufText      = mempty
@@ -78,20 +99,20 @@ newTextBuffer = TextBuffer
     }
 
 textBufferWithPath :: FilePath -> String -> TextBuffer
-textBufferWithPath filePath string = (textBufferFromString string) 
-    { bufPath = Just filePath 
+textBufferWithPath filePath string = (textBufferFromString string)
+    { bufPath = Just filePath
     }
 
 textBufferFromString :: String -> TextBuffer
 textBufferFromString string = newTextBuffer
     { bufText = textSeq
     , bufDims = textSeqDimensions textSeq
-    } 
+    }
     where textSeq = textSeqFromString string
 
-setTextFromString :: String -> TextBuffer -> TextBuffer 
-setTextFromString string buffer = 
-    pushUndo . validateSelection $ 
+setTextFromString :: String -> TextBuffer -> TextBuffer
+setTextFromString string buffer =
+    pushUndo . validateSelection $
         buffer
             { bufText = textSeq
             , bufDims = textSeqDimensions textSeq
@@ -102,14 +123,14 @@ setTextFromString string buffer =
 validateSelection :: TextBuffer -> TextBuffer
 validateSelection textBuffer@TextBuffer{..} = case bufSelection of
     Nothing -> textBuffer
-    Just (cursorBegin, cursorEnd) -> updateCurrentColumn $ textBuffer 
+    Just (cursorBegin, cursorEnd) -> updateCurrentColumn $ textBuffer
         { bufSelection = Just ( validateCursor cursorBegin textBuffer
                               , validateCursor cursorEnd   textBuffer )
         }
 
 -- | Verify that the given cursor is within the boundaries of the text buffer
 validateCursor :: Cursor -> TextBuffer -> Cursor
-validateCursor cursor@(Cursor lineNum colNum) textBuffer@TextBuffer{..} 
+validateCursor cursor@(Cursor lineNum colNum) textBuffer@TextBuffer{..}
     | lineNum >= maxLine    = cursorToEndOfLine maxLine textBuffer
     | colNum  >= maxLineCol = cursorToEndOfLine lineNum textBuffer
     | otherwise             = cursor
@@ -124,8 +145,8 @@ getSelection buffer = fromMaybe (Cursor 0 0, Cursor 0 0) (bufSelection buffer)
 
 selectionFromTextSeq :: TextSeq -> Selection -> String
 selectionFromTextSeq textSeq
-                     (Cursor startLineNum startColNum, 
-                      Cursor endLineNum endColNum) = 
+                     (Cursor startLineNum startColNum,
+                      Cursor endLineNum endColNum) =
     let selectedLines = seqRange (startLineNum, endLineNum + 1) textSeq
         trimmedLines  = Seq.adjust (Seq.drop startColNum) 0
                       . Seq.adjust (Seq.take endColNum)   (length selectedLines - 1)
@@ -156,7 +177,7 @@ updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
 insertTextSeq :: (Cursor, Cursor) -> TextSeq -> TextSeq -> TextSeq
 insertTextSeq sel textSeq origTextSeq = result
   where
-    (Cursor startLineNum startColNum, 
+    (Cursor startLineNum startColNum,
      Cursor endLineNum endColNum) = sel
     -- All lines fully before and after the selection
     before = Seq.take startLineNum     origTextSeq
@@ -167,11 +188,11 @@ insertTextSeq sel textSeq origTextSeq = result
     suffix = Seq.drop endColNum    (Seq.index origTextSeq endLineNum)
     -- Prefix and suffix the newly inserted line(s) with the aforementioned
     -- prefix and suffix characters, and add back the 'before' and 'after' lines
-    result = before 
+    result = before
         <> (Seq.adjust (prefix <>) 0 $
-            Seq.adjust (<> suffix) (length textSeq - 1) $ 
+            Seq.adjust (<> suffix) (length textSeq - 1) $
             textSeq)
-        <> after 
+        <> after
 
 -- | Insert some text into an existing buffer.
 -- Pushes an undo, updates the current column, and updates the cursor.
@@ -182,13 +203,13 @@ insertTextBuffer textSeq buffer = updateCurrentColumn $ newBuffer
     , bufDims      = textSeqDimensions newText
     }
     where
-        newBuffer = pushUndo buffer
-        newText   = insertTextSeq (getSelection buffer) textSeq (bufText buffer)
+        newBuffer  = pushUndo buffer
+        newText    = insertTextSeq (getSelection buffer) textSeq (bufText buffer)
         -- Calculate where the cursor should be after inserting the text
-        newCursor = Cursor newLineNum newColNum
+        newCursor  = Cursor newLineNum newColNum
         newLineNum = startLineNum + (length textSeq - 1)
-        newColNum = if newLineNum == startLineNum then startColNum + lastLen else lastLen
-        lastLen = fromMaybe 0 (length <$> seqLast textSeq)
+        newColNum  = if newLineNum == startLineNum then startColNum + lastLen else lastLen
+        lastLen    = fromMaybe 0 (length <$> seqLast textSeq)
         (Cursor startLineNum startColNum, _) = getSelection buffer
 
 
@@ -247,7 +268,7 @@ moveWordLeft buffer = check selection
 cursorWordLeft :: Cursor -> TextBuffer -> Cursor
 cursorWordLeft (Cursor 0 0) _buffer = Cursor 0 0
 cursorWordLeft (Cursor l 0) buffer  = cursorToEndOfLine (l - 1) buffer
-cursorWordLeft (Cursor l c) buffer = 
+cursorWordLeft (Cursor l c) buffer =
     let curLine     = Seq.index (bufText buffer) l
         spaces      = Seq.elemIndicesR ' ' curLine
         boundaryCol = 0
@@ -259,7 +280,7 @@ cursorWordRight cursor@(Cursor l c) buffer
   | l == maxLine &&
     c == lineLength l text = cursor
   | c == lineLength l text = cursorToStartOfLine (l + 1)
-  | otherwise = 
+  | otherwise =
       let curLine     = Seq.index (bufText buffer) l
           spaces      = Seq.elemIndicesL ' ' curLine
           boundaryCol = lineLength l (bufText buffer)
@@ -275,7 +296,7 @@ moveWordRight buffer = check selection
     selection       = getSelection buffer
     check (start, end)
       | start == end = moveTo (cursorWordRight start buffer) buffer
-    check (_, end) = moveTo end buffer
+    check (_, end)   = moveTo end buffer
 
 cursorUp :: Cursor -> TextBuffer -> Cursor
 cursorUp (Cursor 0 _) _buffer = Cursor 0 0
@@ -304,45 +325,44 @@ cursorToEndOfLine l buffer = Cursor l lineLen
     lineLen = lineLength l (bufText buffer)
 
 selectUp :: TextBuffer -> TextBuffer
-selectUp buffer = go selection
+selectUp buffer = setSelectionVertical (cursorUp start buffer, end) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (cursorUp start buffer, end) }
+    (start, end) = getSelection buffer
 
 selectDown :: TextBuffer -> TextBuffer
-selectDown buffer = go selection
+selectDown buffer = setSelectionVertical (start, cursorDown end buffer) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (start, cursorDown end buffer) }
+    (start, end) = getSelection buffer
 
 selectLeft :: TextBuffer -> TextBuffer
-selectLeft buffer = updateCurrentColumn (go selection)
+selectLeft buffer = setSelection (cursorLeft start buffer, end) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (cursorLeft start buffer, end) }
+    (start, end)  = getSelection buffer
 
 selectRight :: TextBuffer -> TextBuffer
-selectRight buffer = updateCurrentColumn (go selection)
+selectRight buffer = setSelection (start, cursorRight end buffer) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (start, cursorRight end buffer) }
+    (start, end) = getSelection buffer
+
+-- | We don't want to change the current column when moving up and down
+-- past lines that may be shorter than our current column.
+setSelectionVertical :: Selection -> TextBuffer -> TextBuffer
+setSelectionVertical selection buffer = buffer { bufSelection = Just selection }
 
 setSelection :: Selection -> TextBuffer -> TextBuffer
-setSelection selection buffer = 
-    updateCurrentColumn 
+setSelection selection buffer =
+    updateCurrentColumn
         (buffer { bufSelection = Just selection })
 
 selectWordLeft :: TextBuffer -> TextBuffer
-selectWordLeft buffer = updateCurrentColumn (go selection)
+selectWordLeft buffer = setSelection (cursorWordLeft start buffer, end) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (cursorWordLeft start buffer, end) }
+    (start, end) = getSelection buffer
 
 selectWordRight :: TextBuffer -> TextBuffer
-selectWordRight buffer = updateCurrentColumn (go selection)
+selectWordRight buffer = setSelection (start, cursorWordRight end buffer) buffer
   where
-    selection       = getSelection buffer
-    go (start, end) = buffer { bufSelection = Just (start, cursorWordRight end buffer) }
+    (start, end) = getSelection buffer
 
 moveToStartOfLine :: LineNum -> TextBuffer -> TextBuffer
 moveToStartOfLine l buffer = moveTo (cursorToStartOfLine l) buffer
@@ -377,22 +397,93 @@ cursorRight cursor@(Cursor l c) buffer
 
 
 backspace :: TextBuffer -> TextBuffer
-backspace buffer = 
+backspace buffer =
     let (start, end) = getSelection buffer
     in insertString "" (if start == end then selectLeft buffer else buffer)
 
 carriageReturn :: TextBuffer -> TextBuffer
-carriageReturn buffer = 
+carriageReturn buffer =
     let indent = currentIndentation buffer
     in insertString ('\n' : replicate indent ' ') buffer
-    
+
+carriageReturnToNextLine :: TextBuffer -> TextBuffer
+carriageReturnToNextLine buffer = carriageReturn . moveToEndOfLine endLine $ buffer
+    where
+        (Cursor _ _, Cursor endLine _) = getSelection buffer
+
+overSelectedLines :: (LineNum -> TextBuffer -> TextBuffer)
+                              -> TextBuffer -> TextBuffer
+overSelectedLines action buffer = foldl' (flip action) buffer [startLine..endLine]
+    where
+        (Cursor startLine _, Cursor endLine _) = getSelection buffer
+
+indentLines :: TextBuffer -> TextBuffer
+indentLines   = overSelectedLines indentLine
+
+unindentLines :: TextBuffer -> TextBuffer
+unindentLines = overSelectedLines unindentLine
+
+defaultIndent :: Int
+defaultIndent = 4
+
+indentString :: String
+indentString = replicate defaultIndent ' '
+
+indentLine :: LineNum -> TextBuffer -> TextBuffer
+indentLine l buffer =
+    let newBuffer      = insertString indentString . moveToStartOfLine l $ buffer
+        fixedSelection = selectionMovedByCols defaultIndent l (getSelection buffer)
+    in setSelection fixedSelection newBuffer
+
+unindentLine :: LineNum -> TextBuffer -> TextBuffer
+unindentLine l buffer =
+    let spacesToDelete = min defaultIndent . indentationOfLine l . bufText $ buffer
+        newBuffer      = backspace . setSelection (Cursor l 0, Cursor l spacesToDelete) $ buffer
+        -- Get the selection (from the original buffer since we modify it to implement deletion)
+        -- and move it back by whatever we deleted
+        fixedSelection = selectionMovedByCols (-spacesToDelete) l (getSelection buffer)
+    in if spacesToDelete > 0
+        then setSelection fixedSelection newBuffer
+        else buffer
+
+-- | Check if the given line matches the start or end line of the selection,
+-- and if so, move the column of that line by the given number of colums.
+selectionMovedByCols :: ColNum -> LineNum -> (Cursor, Cursor) -> (Cursor, Cursor)
+selectionMovedByCols cols l selection =
+    let (Cursor startLine startCol, Cursor endLine endCol) = selection
+        newSelection
+            | l == startLine && l == endLine = ( Cursor startLine (startCol + cols)
+                                               , Cursor endLine (endCol + cols))
+            | l == startLine = (Cursor startLine (startCol + cols), Cursor endLine endCol)
+            | l == endLine = (Cursor startLine startCol, Cursor endLine (endCol + cols))
+            | otherwise = selection
+    in newSelection
+
+moveLinesDown :: TextBuffer -> TextBuffer
+moveLinesDown = moveLinesWith moveSeqRangeRight 1
+moveLinesUp   :: TextBuffer -> TextBuffer
+moveLinesUp   = moveLinesWith moveSeqRangeLeft (-1)
+
+moveLinesWith :: (LineNum -> LineNum -> TextSeq -> Maybe TextSeq)
+              -> LineNum -> TextBuffer -> TextBuffer
+moveLinesWith moveFunc numLinesMoved buffer =
+    let (Cursor startLine startCol, Cursor endLine endCol) = getSelection buffer
+    in case moveFunc startLine (endLine + 1) (bufText buffer) of
+        Nothing -> buffer
+        Just newSeq -> (pushUndo buffer) { bufText = newSeq, bufSelection = Just newSelection }
+            where newSelection = ( Cursor (startLine + numLinesMoved) startCol
+                                 , Cursor (endLine + numLinesMoved) endCol
+                                 )
+
 currentIndentation :: TextBuffer -> Int
-currentIndentation buffer = lineIndentation l (bufText buffer)
+currentIndentation buffer = indentationOfLine l (bufText buffer)
     where (Cursor l _, _) = getSelection buffer
 
-lineIndentation :: Int -> Seq (Seq Char) -> Int
-lineIndentation l textSeq = Seq.length . Seq.takeWhileL (== ' ') $ line
-    where line = Seq.index textSeq l
+indentationOfLine :: Int -> Seq (Seq Char) -> Int
+indentationOfLine l = Seq.length . Seq.takeWhileL (== ' ') . getLineAt l
+
+getLineAt :: Int -> Seq (Seq Char) -> Seq Char
+getLineAt l textSeq = Seq.index textSeq l
 
 testSelection :: (Cursor, Cursor)
 testSelection = (Cursor 0 1, Cursor 1 2)

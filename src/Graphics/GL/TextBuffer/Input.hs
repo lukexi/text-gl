@@ -96,14 +96,14 @@ handleTextBufferEvent win e rendererLens = do
             when causesSave $
                 textBufferLens >>~ void . liftIO . forkIO . saveTextBuffer
     -- Copy
-    onKeyWithMods e [commandModKey] Key'C $ do
+    onKeyWithMods e [controlModKey] Key'C $ do
         textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
     -- Cut
-    onKeyWithMods e [commandModKey] Key'X $ do
+    onKeyWithMods e [controlModKey] Key'X $ do
         textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
         updateBuffer backspace True
     -- Paste
-    onKeyWithMods e [commandModKey] Key'V $ do
+    onKeyWithMods e [controlModKey] Key'V $ do
         string <- fromMaybe "" <$> getClipboardString win
         updateBuffer (insertString string) True
 
@@ -123,9 +123,9 @@ eventWillSaveTextBuffer e = runIdentity $ do
     return $ or (charCommand:commands)
 
 
-commandModKey, optionModKey :: ModKey
---(commandModKey, optionModKey) = (ModKeySuper, ModKeyAlt) -- Mac
-(commandModKey, optionModKey) = (ModKeyControl, ModKeyAlt) -- Windows
+controlModKey, optionModKey :: ModKey
+--(controlModKey, optionModKey) = (ModKeySuper, ModKeyAlt) -- Mac
+(controlModKey, optionModKey) = (ModKeyControl, ModKeyAlt) -- Windows
 
 type CausesSave = Bool
 data KeyCommand = KeyCommand
@@ -137,22 +137,29 @@ data KeyCommand = KeyCommand
 
 keyCommands :: [KeyCommand]
 keyCommands =
-    [ KeyCommand False [commandModKey]             Key'C         id -- handled above
-    , KeyCommand True  [commandModKey]             Key'X         id -- handled above
-    , KeyCommand True  [commandModKey]             Key'V         id -- handled above
-    , KeyCommand True  [commandModKey]             Key'Z         undo
-    , KeyCommand True  []                          Key'Enter     carriageReturn
-    , KeyCommand True  []                          Key'Backspace backspace
-    , KeyCommand False []                          Key'Left      moveLeft
-    , KeyCommand False []                          Key'Right     moveRight
-    , KeyCommand False []                          Key'Down      moveDown
-    , KeyCommand False []                          Key'Up        moveUp
-    , KeyCommand False [optionModKey]              Key'Left      moveWordLeft
-    , KeyCommand False [optionModKey]              Key'Right     moveWordRight
-    , KeyCommand False [ModKeyShift]               Key'Left      selectLeft
-    , KeyCommand False [ModKeyShift]               Key'Right     selectRight
-    , KeyCommand False [ModKeyShift]               Key'Up        selectUp
-    , KeyCommand False [ModKeyShift]               Key'Down      selectDown
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Right     selectWordRight
-    , KeyCommand False [optionModKey, ModKeyShift] Key'Left      selectWordLeft
+    [ KeyCommand False [controlModKey]              Key'C            id -- handled above
+    , KeyCommand True  [controlModKey]              Key'X            id -- handled above
+    , KeyCommand True  [controlModKey]              Key'V            id -- handled above
+    , KeyCommand True  [controlModKey]              Key'Z            undo
+    , KeyCommand True  []                           Key'Enter        carriageReturn
+    , KeyCommand True  [controlModKey]              Key'Enter        carriageReturnToNextLine
+    , KeyCommand True  []                           Key'Backspace    backspace
+    , KeyCommand False []                           Key'Left         moveLeft
+    , KeyCommand False []                           Key'Right        moveRight
+    , KeyCommand False []                           Key'Down         moveDown
+    , KeyCommand False []                           Key'Up           moveUp
+    , KeyCommand False [optionModKey]               Key'Left         moveWordLeft
+    , KeyCommand False [optionModKey]               Key'Right        moveWordRight
+    , KeyCommand False [ModKeyShift]                Key'Left         selectLeft
+    , KeyCommand False [ModKeyShift]                Key'Right        selectRight
+    , KeyCommand False [ModKeyShift]                Key'Up           selectUp
+    , KeyCommand False [ModKeyShift]                Key'Down         selectDown
+    , KeyCommand False [optionModKey, ModKeyShift]  Key'Right        selectWordRight
+    , KeyCommand False [optionModKey, ModKeyShift]  Key'Left         selectWordLeft
+    , KeyCommand False [controlModKey]              Key'B            moveLeft
+    , KeyCommand False [controlModKey]              Key'F            moveRight
+    , KeyCommand False [controlModKey, ModKeyShift] Key'Up           moveLinesUp
+    , KeyCommand False [controlModKey, ModKeyShift] Key'Down         moveLinesDown
+    , KeyCommand False [controlModKey]              Key'RightBracket indentLines
+    , KeyCommand False [controlModKey]              Key'LeftBracket  unindentLines
     ]
