@@ -137,6 +137,7 @@ data KeyCommand = KeyCommand
 
 keyCommands :: [KeyCommand]
 keyCommands =
+    --           Save? ModKeys                      Key              Action
     [ KeyCommand False [controlModKey]              Key'C            id -- handled above
     , KeyCommand True  [controlModKey]              Key'X            id -- handled above
     , KeyCommand True  [controlModKey]              Key'V            id -- handled above
@@ -162,4 +163,5 @@ keyCommands =
     , KeyCommand False [controlModKey, ModKeyShift] Key'Down         moveLinesDown
     , KeyCommand False [controlModKey]              Key'RightBracket indentLines
     , KeyCommand False [controlModKey]              Key'LeftBracket  unindentLines
+    , KeyCommand False [controlModKey, ModKeyShift] Key'D            duplicateLine
     ]

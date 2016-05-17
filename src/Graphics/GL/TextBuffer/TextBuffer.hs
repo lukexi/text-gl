@@ -64,11 +64,15 @@ moveSeqRangeRight startIndex endIndex aSeq =
         moved :< newEnd -> Just ((begin |> moved) <> middle <> newEnd)
 
 divideSeq :: Int -> Int -> Seq a -> (Seq a, Seq a, Seq a)
-divideSeq startIndex endIndex textSeq = (begin, middle, end)
+divideSeq startIndex endIndex aSeq = (begin, middle, end)
   where
-    (begin, rest) = Seq.splitAt startIndex textSeq
+    (begin, rest) = Seq.splitAt startIndex aSeq
     (middle, end) = Seq.splitAt (endIndex - startIndex) rest
 
+seqDuplicateIndex :: Int -> Seq a -> Seq a
+seqDuplicateIndex index aSeq = before <> Seq.take 1 after <> after
+  where
+    (before, after) = Seq.splitAt index aSeq
 
 textSeqFromString :: String -> TextSeq
 textSeqFromString = Seq.fromList . fmap Seq.fromList . lines . fixup
@@ -474,6 +478,14 @@ moveLinesWith moveFunc numLinesMoved buffer =
             where newSelection = ( Cursor (startLine + numLinesMoved) startCol
                                  , Cursor (endLine + numLinesMoved) endCol
                                  )
+-- | Acts on the last line of the selection,
+-- and moves the cursor to the new line
+duplicateLine :: TextBuffer -> TextBuffer
+duplicateLine buffer =
+    let (Cursor startLine startCol, Cursor endLine endCol) = getSelection buffer
+        newSeq       = seqDuplicateIndex endLine (bufText buffer)
+        newSelection = (Cursor (endLine + 1) endCol, Cursor (endLine + 1) endCol)
+    in (pushUndo buffer) { bufText = newSeq, bufSelection = Just newSelection}
 
 currentIndentation :: TextBuffer -> Int
 currentIndentation buffer = indentationOfLine l (bufText buffer)
