@@ -159,9 +159,9 @@ keyCommands =
     , KeyCommand False [optionModKey, ModKeyShift]  Key'Left         selectWordLeft
     , KeyCommand False [controlModKey]              Key'B            moveLeft
     , KeyCommand False [controlModKey]              Key'F            moveRight
-    , KeyCommand False [controlModKey, ModKeyShift] Key'Up           moveLinesUp
-    , KeyCommand False [controlModKey, ModKeyShift] Key'Down         moveLinesDown
-    , KeyCommand False [controlModKey]              Key'RightBracket indentLines
-    , KeyCommand False [controlModKey]              Key'LeftBracket  unindentLines
-    , KeyCommand False [controlModKey, ModKeyShift] Key'D            duplicateLine
+    , KeyCommand True  [controlModKey, ModKeyShift] Key'Up           moveLinesUp
+    , KeyCommand True  [controlModKey, ModKeyShift] Key'Down         moveLinesDown
+    , KeyCommand True  [controlModKey]              Key'RightBracket indentLines
+    , KeyCommand True  [controlModKey]              Key'LeftBracket  unindentLines
+    , KeyCommand True  [controlModKey, ModKeyShift] Key'D            duplicateLine
     ]
