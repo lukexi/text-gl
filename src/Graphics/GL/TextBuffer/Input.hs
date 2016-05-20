@@ -118,7 +118,8 @@ handleTextBufferEvent win e rendererLens = do
 eventWillSaveTextBuffer :: Event -> Bool
 eventWillSaveTextBuffer e = runIdentity $ do
     commands <- forM keyCommands $ \KeyCommand{..} ->
-        ifKey False e kcmKey (return kcmCausesSave)
+        ifKeyWithMods False e kcmModKeys kcmKey
+            (return kcmCausesSave)
     charCommand <- ifChar False e (\_ -> return True)
     return $ or (charCommand:commands)
 
