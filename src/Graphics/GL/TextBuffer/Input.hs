@@ -15,6 +15,7 @@ import Graphics.UI.GLFW.Pal
 import Control.Lens.Extra
 import Control.Monad
 import Control.Monad.State
+import Control.Exception
 
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer.Types
@@ -35,6 +36,10 @@ isBackspaceChar = (== 8) . ord
 textRendererFromFile :: MonadIO m => Font -> FilePath -> FileWatchMode -> m TextRenderer
 textRendererFromFile font filePath watchMode = liftIO $ do
     text <- readFile filePath
+        `catch` (\e -> do
+            putStrLn $ "textRendererFromFile couldn't read " ++ filePath ++
+                ": " ++ show (e::SomeException)
+            return "")
     textRenderer <- createTextRenderer font (textBufferWithPath filePath text)
 
     case watchMode of
