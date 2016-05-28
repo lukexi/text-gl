@@ -11,6 +11,7 @@ import Control.Lens.Extra
 import Graphics.GL.Freetype.Types
 
 import Halive.FileListener
+import Control.Concurrent.STM
 
 type TextSeq = Seq (Seq Char)
 type ColNum = Int
@@ -18,7 +19,7 @@ type LineNum = Int
 data Cursor = Cursor LineNum ColNum deriving (Eq, Show, Ord)
 type Selection = (Cursor, Cursor)
 
-data TextBuffer = TextBuffer 
+data TextBuffer = TextBuffer
     { bufSelection    :: !(Maybe Selection)
     , bufColumn       :: !Int
     , bufText         :: !TextSeq
@@ -34,16 +35,17 @@ data TextMetrics = TextMetrics
     }
 
 data TextRenderer = TextRenderer
-    { _txrFont               :: !Font
-    , _txrVAO                :: !VertexArrayObject
-    , _txrIndexBuffer        :: !(ArrayBuffer GLint)
-    , _txrOffsetBuffer       :: !(ArrayBuffer (V4 GLfloat))
-    , _txrCorrectionM44      :: !(M44 GLfloat)
-    , _txrTextBuffer         :: !TextBuffer
-    , _txrTextMetrics        :: !TextMetrics
-    , _txrDragRoot           :: !(Maybe Cursor)
-    , _txrFileEventListener  :: !(Maybe FileEventListener)
-    , _txrScroll             :: !(V2 GLfloat)
-    , _txrScreenSize         :: !(Maybe (V2 Int))
+    { _txrFont                 :: !Font
+    , _txrVAO                  :: !VertexArrayObject
+    , _txrIndexBuffer          :: !(ArrayBuffer GLint)
+    , _txrOffsetBuffer         :: !(ArrayBuffer (V4 GLfloat))
+    , _txrNeedsBufferUploadVar :: !(TVar Bool)
+    , _txrCorrectionM44        :: !(M44 GLfloat)
+    , _txrTextBuffer           :: !TextBuffer
+    , _txrTextMetrics          :: !TextMetrics
+    , _txrDragRoot             :: !(Maybe Cursor)
+    , _txrFileEventListener    :: !(Maybe FileEventListener)
+    , _txrScroll               :: !(V2 GLfloat)
+    , _txrScreenSize           :: !(Maybe (V2 Int))
     }
 makeLenses ''TextRenderer

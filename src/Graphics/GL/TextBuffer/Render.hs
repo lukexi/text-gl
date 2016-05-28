@@ -8,6 +8,7 @@ import Graphics.GL.Pal hiding (trace)
 import Control.Lens.Extra
 
 import Control.Monad.Reader
+import Control.Concurrent.STM
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
@@ -38,40 +39,47 @@ createTextRenderer font textBuffer = do
             assignFloatAttribute shader name GL_FLOAT 4
             vertexAttribDivisor attribute 1
 
+    needsBufferUploadVar <- liftIO $ newTVarIO True
     updateMetrics $ TextRenderer
-        { _txrTextBuffer         = textBuffer
-        , _txrTextMetrics        = TextMetrics 
-                                        { txmCharIndices = mempty
-                                        , txmCharOffsets = mempty
-                                        , txmNumChars = 0 
-                                        }
-        , _txrVAO                = glyphVAO
-        , _txrCorrectionM44      = identity
-        , _txrIndexBuffer        = glyphIndexBuffer
-        , _txrOffsetBuffer       = glyphOffsetBuffer
-        , _txrFont               = font
-        , _txrDragRoot           = Nothing
-        , _txrFileEventListener  = Nothing
-        , _txrScroll             = V2 0 0
-        , _txrScreenSize         = Nothing
+        { _txrTextBuffer           = textBuffer
+        , _txrTextMetrics          = TextMetrics
+                                          { txmCharIndices = mempty
+                                          , txmCharOffsets = mempty
+                                          , txmNumChars = 0
+                                          }
+        , _txrVAO                  = glyphVAO
+        , _txrCorrectionM44        = identity
+        , _txrNeedsBufferUploadVar = needsBufferUploadVar
+        , _txrIndexBuffer          = glyphIndexBuffer
+        , _txrOffsetBuffer         = glyphOffsetBuffer
+        , _txrFont                 = font
+        , _txrDragRoot             = Nothing
+        , _txrFileEventListener    = Nothing
+        , _txrScroll               = V2 0 0
+        , _txrScreenSize           = Nothing
         }
 
--- | Recalculates the character indices and glyph offsets of a TextBuffer 
+-- | Recalculates the character indices and glyph offsets of a TextBuffer
 -- and writes them into the TextRenderer's ArrayBuffers
 updateMetrics :: MonadIO m => TextRenderer -> m TextRenderer
 updateMetrics textRenderer@TextRenderer{..} = do
     let newTextRenderer = textRenderer &~ do
             id %= updateScroll
             txrTextMetrics   .= calculateMetrics (textRenderer ^. txrTextBuffer) (textRenderer ^. txrFont)
-            txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id) 
+            txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id)
         newTextMetrics = newTextRenderer ^. txrTextMetrics
-    bufferSubData (newTextRenderer ^. txrIndexBuffer)  (txmCharIndices newTextMetrics)
-    bufferSubData (newTextRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets newTextMetrics))
+    liftIO . atomically . writeTVar (newTextRenderer ^. txrNeedsBufferUploadVar) $ True
+
     return newTextRenderer
+
+uploadCharacters textRenderer = do
+    let textMetrics = textRenderer ^. txrTextMetrics
+    bufferSubData (textRenderer ^. txrIndexBuffer)  (txmCharIndices textMetrics)
+    bufferSubData (textRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
 
 updateScroll :: TextRenderer -> TextRenderer
 updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to getSelection) of
-    (Just screenSize, (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) -> 
+    (Just screenSize, (Cursor (fromIntegral -> cursorLine) (fromIntegral -> cursorCol), _)) ->
         textRenderer &~ do
             V2 scrollX scrollY <- use txrScroll
             let V2 fontWidth fontHeight = fontDimensions (textRenderer ^. txrFont)
@@ -79,28 +87,28 @@ updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^.
                 screenH                 = screenHOrig * (fontWidth / fontHeight)
                 scrollPad               = 2
             -- Check for scrolling off the right of the screen
-            when (cursorCol > screenW + scrollX - scrollPad) $ 
+            when (cursorCol > screenW + scrollX - scrollPad) $
                 txrScroll . _x .= cursorCol - (screenW - scrollPad)
             -- Check for scrolling off the bottom of the screen
             when (cursorLine > screenH + scrollY - scrollPad) $
                 txrScroll . _y .= cursorLine - (screenH - scrollPad)
             -- Check for scrolling off the left of the screen
-            when (cursorCol < scrollX + scrollPad) $ 
+            when (cursorCol < scrollX + scrollPad) $
                 txrScroll . _x .= cursorCol - scrollPad
             -- Check for scrolling off the top of the screen
-            when (cursorLine < scrollY + scrollPad) $ 
+            when (cursorLine < scrollY + scrollPad) $
                 txrScroll . _y .= cursorLine - scrollPad
 
     _ -> textRenderer
 
 
 correctionMatrixForTextRenderer :: TextRenderer -> M44 Float
-correctionMatrixForTextRenderer textRenderer = 
-            scaleMatrix (realToFrac finalResScale) 
-        !*! translateMatrix (V3 (centeringOffset ^. _x) (centeringOffset ^. _y) 0) 
+correctionMatrixForTextRenderer textRenderer =
+            scaleMatrix (realToFrac finalResScale)
+        !*! translateMatrix (V3 (centeringOffset ^. _x) (centeringOffset ^. _y) 0)
   where
     textBuffer = textRenderer ^. txrTextBuffer
-    (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions (bufText textBuffer) 
+    (realToFrac -> numCharsX, realToFrac -> numCharsY) = textSeqDimensions (bufText textBuffer)
     fontDims@(V2 fontWidth fontHeight)                 = fontDimensions (textRenderer ^. txrFont)
     lineSpacing                                        = fontHeight * 0.15 -- 15% default line spacing
 
@@ -117,19 +125,19 @@ correctionMatrixForTextRenderer textRenderer =
             scroll = textRenderer ^. txrScroll & _x %~ negate
 
         -- If no explicit target screensize, fall back to centering based on height and width of text
-        Nothing -> (offset, scaling) 
+        Nothing -> (offset, scaling)
           where
             longestLineWidth = fontWidth  * numCharsX
             totalLinesHeight = fontHeight * numCharsY
-            offset = V2 
-                (-longestLineWidth/2) 
-                (totalLinesHeight/2 + lineSpacing) 
+            offset = V2
+                (-longestLineWidth/2)
+                (totalLinesHeight/2 + lineSpacing)
             scaling = 1 / fontHeight
 
 
 fontDimensions :: Font -> V2 Float
 fontDimensions Font{..} = V2 charWidth charHeight
-    where 
+    where
         charWidth  = gmAdvanceX . glyMetrics . fntGlyphForChar $ '_'
         charHeight = fntPointSize
 
@@ -138,13 +146,13 @@ fontDimensions Font{..} = V2 charWidth charHeight
 -- of columns. So to choose how many characters you want to be able to fit, you should
 -- scale the text's Model matrix by 1/numChars.
 renderText :: MonadIO m => TextRenderer -> M44 GLfloat -> M44 GLfloat  -> m ()
-renderText textRenderer projViewM44 modelM44 = 
-    renderTextPreCorrected textRenderer projViewM44 
+renderText textRenderer projViewM44 modelM44 =
+    renderTextPreCorrected textRenderer projViewM44
         (modelM44 !*! textRenderer ^. txrCorrectionM44)
 
 renderTextPreCorrected :: MonadIO m => TextRenderer -> M44 GLfloat -> M44 GLfloat -> m ()
-renderTextPreCorrected textRenderer projViewM44 modelM44 = 
-    withSharedFont (textRenderer ^. txrFont) projViewM44 $ 
+renderTextPreCorrected textRenderer projViewM44 modelM44 =
+    withSharedFont (textRenderer ^. txrFont) projViewM44 $
         renderTextPreCorrectedOfSameFont textRenderer modelM44
 
 -- | Lets us share the calls to useProgram etc. among a bunch of text renderings
@@ -158,20 +166,28 @@ withSharedFont font@Font{..} projViewM44 renderActions = do
     uniformF   uTime =<< getNow
     uniformM44 uProjectionView projViewM44
 
-    runReaderT renderActions font 
+    runReaderT renderActions font
 
-renderTextPreCorrectedOfSameFont :: (MonadIO m, MonadReader Font m) 
+renderTextPreCorrectedOfSameFont :: (MonadIO m, MonadReader Font m)
                                  => TextRenderer -> M44 GLfloat -> m ()
 renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
+    needsBufferUpload <- liftIO . atomically $ do
+        let needsBufferUploadVar = textRenderer ^. txrNeedsBufferUploadVar
+        result <- readTVar needsBufferUploadVar
+        when (result == True) (writeTVar needsBufferUploadVar False)
+        return result
+    when needsBufferUpload $ do
+        uploadCharacters textRenderer
+
     Font{..} <- ask
     let rendererVAO       = textRenderer ^. txrVAO
         TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
-    
+
     uniformM44 uModel modelM44
 
     let numVertices  = 4
         numInstances = fromIntegral txmNumChars
-    withVAO rendererVAO $ 
+    withVAO rendererVAO $
         glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
     return ()
