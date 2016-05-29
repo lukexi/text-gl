@@ -22,9 +22,11 @@ createTextRenderer font textBuffer = do
     let shader = fntShader font
     glyphVAO <- newVAO
 
-    -- Reserve space for 10000 characters
-    glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..10000] :: [GLint])
-    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate 10000 (0::V4 GLfloat))
+    -- Reserve space for 20000 characters
+    let maxChars :: Num a => a
+        maxChars = 20000
+    glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..maxChars] :: [GLint])
+    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate maxChars (0::V4 GLfloat))
 
     withVAO glyphVAO $ do
         withArrayBuffer glyphIndexBuffer $ do
