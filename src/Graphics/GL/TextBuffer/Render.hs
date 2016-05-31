@@ -9,6 +9,7 @@ import Control.Lens.Extra
 
 import Control.Monad.Reader
 import Control.Concurrent.STM
+import Control.Concurrent
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
@@ -20,46 +21,73 @@ import Debug.Trace
 
 createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
-    let shader = fntShader font
-    glyphVAO <- newVAO
 
-    -- Reserve space for 20000 characters
-    let maxChars :: Num a => a
-        maxChars = 20000
-    glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..maxChars] :: [GLint])
-    glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate maxChars (0::V4 GLfloat))
 
-    withVAO glyphVAO $ do
-        withArrayBuffer glyphIndexBuffer $ do
-            let name = "aInstanceGlyphIndex"
-            attribute <- getShaderAttribute shader name
-            assignIntegerAttribute shader name GL_INT 1
-            vertexAttribDivisor attribute 1
-        withArrayBuffer glyphOffsetBuffer $ do
-            let name = "aInstanceCharacterOffset"
-            attribute <- getShaderAttribute shader name
-            assignFloatAttribute shader name GL_FLOAT 4
-            vertexAttribDivisor attribute 1
-
-    needsBufferUploadVar <- liftIO $ newTVarIO True
+    resourcesVar <- liftIO (newTVarIO Nothing)
     updateMetrics $ TextRenderer
         { _txrTextBuffer           = textBuffer
+        , _txrRenderResourcesVar   = resourcesVar
         , _txrTextMetrics          = TextMetrics
                                           { txmCharIndices = mempty
                                           , txmCharOffsets = mempty
                                           , txmNumChars = 0
                                           }
-        , _txrVAO                  = glyphVAO
         , _txrCorrectionM44        = identity
-        , _txrNeedsBufferUploadVar = needsBufferUploadVar
-        , _txrIndexBuffer          = glyphIndexBuffer
-        , _txrOffsetBuffer         = glyphOffsetBuffer
         , _txrFont                 = font
         , _txrDragRoot             = Nothing
         , _txrFileEventListener    = Nothing
         , _txrScroll               = V2 0 0
         , _txrScreenSize           = Nothing
         }
+
+
+updateRenderResources textRenderer = liftIO $ do
+
+    let uploadChars resources = do
+            let textMetrics = textRenderer ^. txrTextMetrics
+            bufferSubData (resources ^. trrIndexBuffer)  (txmCharIndices textMetrics)
+            bufferSubData (resources ^. trrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
+
+    let renderResourcesVar = textRenderer ^. txrRenderResourcesVar
+    mResources <- atomically $ readTVar renderResourcesVar
+    case mResources of
+        Just resources -> do
+            when (resources ^. trrNeedsBufferUpload) $ do
+                uploadChars resources
+                atomically $ writeTVar renderResourcesVar (Just $ resources & trrNeedsBufferUpload .~ False)
+            return resources
+        Nothing -> do
+            let font = textRenderer ^. txrFont
+                shader = fntShader font
+            glyphVAO <- newVAO
+
+            -- Reserve space for 20000 characters
+            let maxChars :: Num a => a
+                maxChars = 20000
+            glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..maxChars] :: [GLint])
+            glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate maxChars (0::V4 GLfloat))
+
+            withVAO glyphVAO $ do
+                withArrayBuffer glyphIndexBuffer $ do
+                    let name = "aInstanceGlyphIndex"
+                    attribute <- getShaderAttribute shader name
+                    assignIntegerAttribute shader name GL_INT 1
+                    vertexAttribDivisor attribute 1
+                withArrayBuffer glyphOffsetBuffer $ do
+                    let name = "aInstanceCharacterOffset"
+                    attribute <- getShaderAttribute shader name
+                    assignFloatAttribute shader name GL_FLOAT 4
+                    vertexAttribDivisor attribute 1
+            let resources = TextRendererResources
+                    { _trrVAO               = glyphVAO
+                    , _trrIndexBuffer       = glyphIndexBuffer
+                    , _trrOffsetBuffer      = glyphOffsetBuffer
+                    , _trrNeedsBufferUpload = False
+                    }
+            uploadChars resources
+            atomically $ writeTVar renderResourcesVar (Just resources)
+            return resources
+
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer
 -- and writes them into the TextRenderer's ArrayBuffers
@@ -70,14 +98,16 @@ updateMetrics textRenderer@TextRenderer{..} = do
             txrTextMetrics   .= calculateMetrics (textRenderer ^. txrTextBuffer) (textRenderer ^. txrFont)
             txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id)
         newTextMetrics = newTextRenderer ^. txrTextMetrics
-    liftIO . atomically . writeTVar (newTextRenderer ^. txrNeedsBufferUploadVar) $ True
+        resourcesVar = newTextRenderer ^. txrRenderResourcesVar
+    liftIO . atomically $ do
+        mResources <- readTVar resourcesVar
+        case mResources of
+            Nothing -> return ()
+            Just resources -> writeTVar resourcesVar (Just $ resources & trrNeedsBufferUpload .~ True)
 
     return newTextRenderer
 
-uploadCharacters textRenderer = do
-    let textMetrics = textRenderer ^. txrTextMetrics
-    bufferSubData (textRenderer ^. txrIndexBuffer)  (txmCharIndices textMetrics)
-    bufferSubData (textRenderer ^. txrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
+
 
 updateScroll :: TextRenderer -> TextRenderer
 updateScroll textRenderer = case (textRenderer ^. txrScreenSize, textRenderer ^. txrTextBuffer . to getSelection) of
@@ -173,16 +203,10 @@ withSharedFont font@Font{..} projViewM44 renderActions = do
 renderTextPreCorrectedOfSameFont :: (MonadIO m, MonadReader Font m)
                                  => TextRenderer -> M44 GLfloat -> m ()
 renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
-    needsBufferUpload <- liftIO . atomically $ do
-        let needsBufferUploadVar = textRenderer ^. txrNeedsBufferUploadVar
-        result <- readTVar needsBufferUploadVar
-        when (result == True) (writeTVar needsBufferUploadVar False)
-        return result
-    when needsBufferUpload $ do
-        uploadCharacters textRenderer
+    resources <- updateRenderResources textRenderer
 
     Font{..} <- ask
-    let rendererVAO       = textRenderer ^. txrVAO
+    let rendererVAO       = resources ^. trrVAO
         TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
 

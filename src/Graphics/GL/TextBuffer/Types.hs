@@ -32,14 +32,19 @@ data TextMetrics = TextMetrics
     { txmCharIndices :: ![GLint]
     , txmCharOffsets :: ![(Cursor, V4 GLfloat)]
     , txmNumChars    :: !Int
+    } deriving Show
+
+data TextRendererResources = TextRendererResources
+    { _trrVAO                  :: !VertexArrayObject
+    , _trrIndexBuffer          :: !(ArrayBuffer GLint)
+    , _trrOffsetBuffer         :: !(ArrayBuffer (V4 GLfloat))
+    , _trrNeedsBufferUpload    :: !Bool
     }
+makeLenses ''TextRendererResources
 
 data TextRenderer = TextRenderer
     { _txrFont                 :: !Font
-    , _txrVAO                  :: !VertexArrayObject
-    , _txrIndexBuffer          :: !(ArrayBuffer GLint)
-    , _txrOffsetBuffer         :: !(ArrayBuffer (V4 GLfloat))
-    , _txrNeedsBufferUploadVar :: !(TVar Bool)
+    , _txrRenderResourcesVar   :: !(TVar (Maybe TextRendererResources))
     , _txrCorrectionM44        :: !(M44 GLfloat)
     , _txrTextBuffer           :: !TextBuffer
     , _txrTextMetrics          :: !TextMetrics
