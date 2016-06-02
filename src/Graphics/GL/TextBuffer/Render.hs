@@ -18,15 +18,18 @@ import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Types
 
 import Debug.Trace
+import Data.Maybe
 
 createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
 
 
-    resourcesVar <- liftIO (newTVarIO Nothing)
+    resourcesVar <- liftIO newEmptyTMVarIO
+    renderChan   <- liftIO newTChanIO
     updateMetrics $ TextRenderer
         { _txrTextBuffer           = textBuffer
         , _txrRenderResourcesVar   = resourcesVar
+        , _txrRenderChan           = renderChan
         , _txrTextMetrics          = TextMetrics
                                           { txmCharIndices = mempty
                                           , txmCharOffsets = mempty
@@ -41,21 +44,34 @@ createTextRenderer font textBuffer = do
         }
 
 
+-- Oy, this is twisted as hell and needs a rewrite.
+-- We want to be able to enqueue TextRenderer upload operations from a background thread.
+-- We don't want to render more than is necessary, and we assume the render thread is ticking
+-- more often than TextRenderer changes are occurring.
+-- We don't want to block either thread.
+-- So, when a text renderer is updated in the background, it places a copy of itself on the render
+-- chan. When the render chan ticks, it skips to the very latest item on that channel and uploads that.
+-- This way the latest text is always uploaded, and as long as the render thread ticks more quickly than
+-- text renderer changes are occurring, everything should be fine.
 updateRenderResources textRenderer = liftIO $ do
+    resources <- acquireRenderResources textRenderer
 
-    let uploadChars resources = do
-            let textMetrics = textRenderer ^. txrTextMetrics
-            bufferSubData (resources ^. trrIndexBuffer)  (txmCharIndices textMetrics)
-            bufferSubData (resources ^. trrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
+    let exhaustTChan :: TChan a -> STM [a]
+        exhaustTChan chan = tryReadTChan chan >>= \case
+            Just a -> (a:) <$> exhaustTChan chan
+            Nothing -> return []
+    maybeUpload <- listToMaybe . reverse <$> atomically (exhaustTChan (textRenderer ^. txrRenderChan))
+    forM_ maybeUpload $ \uploadRenderer -> do
+        let textMetrics = uploadRenderer ^. txrTextMetrics
+        bufferSubData (resources ^. trrIndexBuffer)  (txmCharIndices textMetrics)
+        bufferSubData (resources ^. trrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
+    return (resources ^. trrVAO)
 
+acquireRenderResources textRenderer = do
     let renderResourcesVar = textRenderer ^. txrRenderResourcesVar
-    mResources <- atomically $ readTVar renderResourcesVar
+    mResources <- atomically $ tryReadTMVar renderResourcesVar
     case mResources of
-        Just resources -> do
-            when (resources ^. trrNeedsBufferUpload) $ do
-                uploadChars resources
-                atomically $ writeTVar renderResourcesVar (Just $ resources & trrNeedsBufferUpload .~ False)
-            return resources
+        Just resources -> return resources
         Nothing -> do
             let font = textRenderer ^. txrFont
                 shader = fntShader font
@@ -82,12 +98,9 @@ updateRenderResources textRenderer = liftIO $ do
                     { _trrVAO               = glyphVAO
                     , _trrIndexBuffer       = glyphIndexBuffer
                     , _trrOffsetBuffer      = glyphOffsetBuffer
-                    , _trrNeedsBufferUpload = False
                     }
-            uploadChars resources
-            atomically $ writeTVar renderResourcesVar (Just resources)
+            atomically $ putTMVar renderResourcesVar resources
             return resources
-
 
 -- | Recalculates the character indices and glyph offsets of a TextBuffer
 -- and writes them into the TextRenderer's ArrayBuffers
@@ -98,12 +111,9 @@ updateMetrics textRenderer@TextRenderer{..} = do
             txrTextMetrics   .= calculateMetrics (textRenderer ^. txrTextBuffer) (textRenderer ^. txrFont)
             txrCorrectionM44 <~ (correctionMatrixForTextRenderer <$> use id)
         newTextMetrics = newTextRenderer ^. txrTextMetrics
-        resourcesVar = newTextRenderer ^. txrRenderResourcesVar
-    liftIO . atomically $ do
-        mResources <- readTVar resourcesVar
-        case mResources of
-            Nothing -> return ()
-            Just resources -> writeTVar resourcesVar (Just $ resources & trrNeedsBufferUpload .~ True)
+        renderChan     = newTextRenderer ^. txrRenderChan
+    liftIO . atomically $
+        writeTChan renderChan newTextRenderer
 
     return newTextRenderer
 
@@ -203,11 +213,10 @@ withSharedFont font@Font{..} projViewM44 renderActions = do
 renderTextPreCorrectedOfSameFont :: (MonadIO m, MonadReader Font m)
                                  => TextRenderer -> M44 GLfloat -> m ()
 renderTextPreCorrectedOfSameFont textRenderer modelM44 = do
-    resources <- updateRenderResources textRenderer
+    rendererVAO <- updateRenderResources textRenderer
 
     Font{..} <- ask
-    let rendererVAO       = resources ^. trrVAO
-        TextMetrics{..}   = textRenderer ^. txrTextMetrics
+    let TextMetrics{..}   = textRenderer ^. txrTextMetrics
         GlyphUniforms{..} = fntUniforms
 
     uniformM44 uModel modelM44

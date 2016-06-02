@@ -38,13 +38,13 @@ data TextRendererResources = TextRendererResources
     { _trrVAO                  :: !VertexArrayObject
     , _trrIndexBuffer          :: !(ArrayBuffer GLint)
     , _trrOffsetBuffer         :: !(ArrayBuffer (V4 GLfloat))
-    , _trrNeedsBufferUpload    :: !Bool
     }
 makeLenses ''TextRendererResources
 
 data TextRenderer = TextRenderer
     { _txrFont                 :: !Font
-    , _txrRenderResourcesVar   :: !(TVar (Maybe TextRendererResources))
+    , _txrRenderResourcesVar   :: !(TMVar TextRendererResources)
+    , _txrRenderChan           :: !(TChan TextRenderer)
     , _txrCorrectionM44        :: !(M44 GLfloat)
     , _txrTextBuffer           :: !TextBuffer
     , _txrTextMetrics          :: !TextMetrics
