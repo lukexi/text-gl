@@ -48,14 +48,15 @@ textRendererFromFile font filePath watchMode = liftIO $ do
             fileEventListener <- eventListenerForFile filePath ReadFileOnEvents
             return $ textRenderer & txrFileEventListener ?~ fileEventListener
 
-renameTextRendererFile :: forall s m. (MonadState s m, MonadIO m)
-                       => FilePath -> Traversal' s TextRenderer -> m ()
-renameTextRendererFile newFileName rendererLens = do
-    rendererLens . txrFileEventListener . traverse >>~ killFileEventListener
-    fileEventListener <- eventListenerForFile newFileName ReadFileOnEvents
-    rendererLens . txrFileEventListener ?= fileEventListener
+renameTextRendererFile :: (MonadIO m)
+                       => FilePath -> TextRenderer -> m TextRenderer
+renameTextRendererFile newFileName textRenderer = do
+    forM_ (textRenderer ^. txrFileEventListener) killFileEventListener
 
-    rendererLens . txrTextBuffer %= \textBuf -> textBuf { bufPath = Just newFileName }
+    fileEventListener <- eventListenerForFile newFileName ReadFileOnEvents
+    return $ textRenderer &~ do
+        txrFileEventListener ?= fileEventListener
+        txrTextBuffer %= \textBuf -> textBuf { bufPath = Just newFileName }
 
 -- | Must pass WatchFile to textRendererFromFile to use this
 refreshTextRendererFromFile :: forall s m. (MonadState s m, MonadIO m)
@@ -169,5 +170,6 @@ keyCommands =
     , KeyCommand True  [controlModKey, ModKeyShift] Key'Down         moveLinesDown
     , KeyCommand True  [controlModKey]              Key'RightBracket indentLines
     , KeyCommand True  [controlModKey]              Key'LeftBracket  unindentLines
+    , KeyCommand True  [controlModKey]              Key'Slash        toggleLinesComment
     , KeyCommand True  [controlModKey, ModKeyShift] Key'D            duplicateLine
     ]

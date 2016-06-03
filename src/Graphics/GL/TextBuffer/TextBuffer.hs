@@ -427,16 +427,34 @@ indentLines   = overSelectedLines indentLine
 unindentLines :: TextBuffer -> TextBuffer
 unindentLines = overSelectedLines unindentLine
 
+toggleLinesComment :: TextBuffer -> TextBuffer
+toggleLinesComment = overSelectedLines toggleLineComment
+
 defaultIndent :: Int
 defaultIndent = 4
 
 indentString :: String
 indentString = replicate defaultIndent ' '
 
+commentString :: String
+commentString = "--"
+
+toggleLineComment :: LineNum -> TextBuffer -> TextBuffer
+toggleLineComment l buffer =
+    let commentLen         = length commentString
+        line               = getLineAt l (bufText buffer)
+        isCommented        = toList (Seq.take commentLen line) == commentString
+        (moved, newBuffer) = if isCommented
+            then (-commentLen, backspace . setSelection (Cursor l 0, Cursor l commentLen) $ buffer)
+            else ( commentLen, insertString commentString . moveToStartOfLine l $ buffer)
+        fixedSelection = selectionMovedByCols moved l (getSelection buffer)
+    in setSelection fixedSelection newBuffer
+
+
 indentLine :: LineNum -> TextBuffer -> TextBuffer
 indentLine l buffer =
     let newBuffer      = insertString indentString . moveToStartOfLine l $ buffer
-        fixedSelection = selectionMovedByCols defaultIndent l (getSelection buffer)
+        fixedSelection = selectionMovedByCols (length indentString) l (getSelection buffer)
     in setSelection fixedSelection newBuffer
 
 unindentLine :: LineNum -> TextBuffer -> TextBuffer
