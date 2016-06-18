@@ -20,6 +20,10 @@ import Graphics.GL.TextBuffer.Types
 import Debug.Trace
 import Data.Maybe
 
+-- Reserve space for 20000 characters
+maxTextRendererChars :: Num a => a
+maxTextRendererChars = 10000
+
 createTextRenderer :: MonadIO m => Font -> TextBuffer -> m TextRenderer
 createTextRenderer font textBuffer = do
 
@@ -63,8 +67,8 @@ updateRenderResources textRenderer = liftIO $ do
     maybeUpload <- listToMaybe . reverse <$> atomically (exhaustTChan (textRenderer ^. txrRenderChan))
     forM_ maybeUpload $ \uploadRenderer -> do
         let textMetrics = uploadRenderer ^. txrTextMetrics
-        bufferSubData (resources ^. trrIndexBuffer)  (txmCharIndices textMetrics)
-        bufferSubData (resources ^. trrOffsetBuffer) (map snd (txmCharOffsets textMetrics))
+        bufferSubData (resources ^. trrIndexBuffer)  (take maxTextRendererChars $ txmCharIndices textMetrics)
+        bufferSubData (resources ^. trrOffsetBuffer) (take maxTextRendererChars $ map snd (txmCharOffsets textMetrics))
     return (resources ^. trrVAO)
 
 acquireRenderResources textRenderer = do
@@ -77,11 +81,9 @@ acquireRenderResources textRenderer = do
                 shader = fntShader font
             glyphVAO <- newVAO
 
-            -- Reserve space for 20000 characters
-            let maxChars :: Num a => a
-                maxChars = 20000
-            glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..maxChars] :: [GLint])
-            glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate maxChars (0::V4 GLfloat))
+
+            glyphIndexBuffer  <- bufferData GL_DYNAMIC_DRAW ([0..maxTextRendererChars] :: [GLint])
+            glyphOffsetBuffer <- bufferData GL_DYNAMIC_DRAW (replicate maxTextRendererChars (0::V4 GLfloat))
 
             withVAO glyphVAO $ do
                 withArrayBuffer glyphIndexBuffer $ do
