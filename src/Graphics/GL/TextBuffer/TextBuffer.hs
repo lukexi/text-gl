@@ -22,7 +22,8 @@ getZeroWidth cursor@(start, _)
     | otherwise          = Nothing
 
 cursorEqual :: Cursor -> Selection -> Bool
-cursorEqual cursor (selectionStart, selectionEnd) = cursor == selectionStart && cursor == selectionEnd
+cursorEqual cursor (selectionStart, selectionEnd) =
+    cursor == selectionStart && cursor == selectionEnd
 
 cursorWithin :: Cursor -> Selection -> Bool
 cursorWithin (Cursor lineNum colNum)
@@ -102,6 +103,9 @@ newTextBuffer = TextBuffer
     , bufDims      = (0,0)
     }
 
+isEmptyTextBuffer :: TextBuffer -> Bool
+isEmptyTextBuffer TextBuffer{..} = Seq.null bufText
+
 textBufferWithPath :: FilePath -> String -> TextBuffer
 textBufferWithPath filePath string = (textBufferFromString string)
     { bufPath = Just filePath
@@ -158,14 +162,16 @@ selectionFromTextSeq textSeq
     in stringFromTextSeq trimmedLines
 
 selectionFromTextBuffer :: TextBuffer -> String
-selectionFromTextBuffer TextBuffer{..} = fromMaybe "" $ selectionFromTextSeq bufText <$> bufSelection
+selectionFromTextBuffer TextBuffer{..} = fromMaybe "" $
+    selectionFromTextSeq bufText <$> bufSelection
 
 currentColumn :: TextBuffer -> Int
 currentColumn buffer@TextBuffer{..} = startColNum
     where (Cursor _ startColNum, _) = getSelection buffer
 
 
--- FIXME Disabling Undo while I verify that it doesn't cause too much memory pressure implemented this way
+-- FIXME Disabling Undo while I verify that it
+-- doesn't cause too much memory pressure implemented this way
 pushUndo :: TextBuffer -> TextBuffer
 --pushUndo buffer = buffer { bufUndo = Just buffer }
 pushUndo = id
