@@ -80,14 +80,17 @@ editTextRendererBuffer rendererLens action = do
 
 setTextRendererText :: forall s m. (MonadState s m, MonadIO m)
                     => Traversal' s TextRenderer -> String -> m ()
-setTextRendererText rendererLens text = editTextRendererBuffer rendererLens (setTextFromString text)
+setTextRendererText rendererLens text =
+    editTextRendererBuffer rendererLens (setTextFromString text)
 
 saveTextBuffer :: MonadIO m => TextBuffer -> m ()
 saveTextBuffer buffer = liftIO $ case bufPath buffer of
     Nothing -> putStrLn "Tried to save text buffer with no path"
     Just bufferPath -> do
-        putStrLn $ "Saving " ++ bufferPath ++ "..."
+        --putStrLn $ "Saving " ++ bufferPath ++ "..."
         writeFile bufferPath (stringFromTextBuffer buffer)
+            `catch` (\e ->
+                putStrLn ("Error in saveTextBuffer: " ++ show (e :: IOException)))
 
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m)
                       => Window -> Event -> Traversal' s TextRenderer -> m ()
