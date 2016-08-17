@@ -6,7 +6,7 @@
 ------------------------------------------
 [ ] Move lines up/down
 
-[ ] Ctrl-f/ctrl-b
+[x] Ctrl-f/ctrl-b
 
 [ ] Control-enter
 
@@ -26,14 +26,6 @@
 [x] Click-drag to select
 
 [x] Auto-indent on newline
-
-
-
-
-
-
-
-
 
 
 

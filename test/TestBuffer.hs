@@ -2,12 +2,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Graphics.GL
 import Graphics.GL.Pal
-import Graphics.UI.GLFW.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
+import Graphics.VR.Pal
+import SDL hiding (get)
 
 import Control.Monad
 import Control.Monad.State
@@ -23,11 +25,11 @@ fontFile = "test/SourceCodePro-Regular.ttf"
 main :: IO ()
 main = do
 
-    (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
+    VRPal{vrpWindow=window} <- reacquire 0 $ initVRPal "Text GL"
 
     glyphProg     <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
     font          <- createFont fontFile 50 glyphProg
-    
+
     glClearColor 0.1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
 
@@ -38,13 +40,13 @@ main = do
     let fileName = "TODO.txt"
     initialState <- textRendererFromFile font fileName WatchFile
 
-    
+
     void . flip runStateT initialState $ do
         editTextRendererBuffer id $ moveTo (Cursor 0 0)
-        whileWindow win $ mainLoop win events
+        whileWindow window $ mainLoop window
 
 
-mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> m ()
+mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> [Event] -> m ()
 mainLoop win events = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
@@ -60,11 +62,9 @@ mainLoop win events = do
     refreshTextRendererFromFile id
 
     -- Get mouse/keyboard/OS events from GLFW
-    es <- gatherEvents events
-    forM_ es $ \e -> do
-        closeOnEscape win e
+    forM_ events $ \e -> do
 
-        _ <- handleTextBufferEvent win e id
+        _ <- handleTextBufferEvent e id
         _ <- handleTextBufferMouseEvent win e id projM44 modelM44 newPose
         return ()
 
@@ -74,8 +74,8 @@ mainLoop win events = do
     -- Render our scene
     textRenderer <- get
     renderText textRenderer projViewM44 modelM44
-    
-    swapBuffers win
+
+    glSwapWindow win
 
 
 

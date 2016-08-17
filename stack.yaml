@@ -6,6 +6,7 @@ packages:
 - '../glfw-pal'
 - '../halive'
 - '../lens-extra'
-- '../bindings-GLFW'
 - '../freetype-gl-mini'
-resolver: nightly-2016-02-02
+- '../vr-pal'
+- '../openvr-hs'
+resolver: nightly-2016-08-17

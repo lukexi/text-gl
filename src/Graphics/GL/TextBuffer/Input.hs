@@ -10,7 +10,8 @@
 
 module Graphics.GL.TextBuffer.Input where
 
-import Graphics.UI.GLFW.Pal
+import Graphics.VR.Pal
+import SDL
 
 import Control.Lens.Extra
 import Control.Monad
@@ -21,16 +22,16 @@ import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer.Types
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Render
-import Data.Char
+--import Data.Char
 import Control.Concurrent
 import Halive.FileListener
-import Data.Maybe
+import qualified Data.Text as Text
 
 data FileWatchMode = WatchFile | NoWatchFile deriving (Eq, Show)
 
 -- | Recognize certain control characters and react to them appropriately
-isBackspaceChar :: Char -> Bool
-isBackspaceChar = (== 8) . ord
+--isBackspaceChar :: Char -> Bool
+--isBackspaceChar = (== 8) . ord
 
 -- | Must call refreshTextRendererFromFile
 textRendererFromFile :: MonadIO m => Font -> FilePath -> FileWatchMode -> m TextRenderer
@@ -93,8 +94,8 @@ saveTextBuffer buffer = liftIO $ case bufPath buffer of
                 putStrLn ("Error in saveTextBuffer: " ++ show (e :: IOException)))
 
 handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m)
-                      => Window -> Event -> Traversal' s TextRenderer -> m ()
-handleTextBufferEvent win e rendererLens = do
+                      => Event -> Traversal' s TextRenderer -> m ()
+handleTextBufferEvent e rendererLens = do
 
     let textBufferLens :: Traversal' s TextBuffer
         textBufferLens = rendererLens . txrTextBuffer
@@ -105,31 +106,31 @@ handleTextBufferEvent win e rendererLens = do
             when causesSave $
                 textBufferLens >>~ void . liftIO . forkIO . saveTextBuffer
     -- Copy
-    onKeyWithMods e [controlModKey] Key'C $ do
-        textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
+    onKeyWithMods e [controlModKey] KeycodeC $ do
+        textBufferLens >>~ setClipboardText . Text.pack . selectionFromTextBuffer
     -- Cut
-    onKeyWithMods e [controlModKey] Key'X $ do
-        textBufferLens >>~ setClipboardString win . selectionFromTextBuffer
+    onKeyWithMods e [controlModKey] KeycodeX $ do
+        textBufferLens >>~ setClipboardText . Text.pack . selectionFromTextBuffer
         updateBuffer backspace True
     -- Paste
-    onKeyWithMods e [controlModKey] Key'V $ do
-        string <- fromMaybe "" <$> getClipboardString win
+    onKeyWithMods e [controlModKey] KeycodeV $ do
+        string <- Text.unpack <$> getClipboardText
         updateBuffer (insertString string) True
 
     forM_ keyCommands $ \KeyCommand{..} ->
         onKeyWithMods e kcmModKeys kcmKey (updateBuffer kcmAction kcmCausesSave)
 
     -- Regular character insertion
-    onChar e $ \case
-        (isBackspaceChar -> True) -> updateBuffer backspace True
-        char                      -> updateBuffer (insertChar char) True
+    onText e $ \case
+        --(isBackspaceChar -> True) -> updateBuffer backspace True
+        text                      -> updateBuffer (insertString (Text.unpack text)) True
 
 eventWillSaveTextBuffer :: Event -> Bool
 eventWillSaveTextBuffer e = runIdentity $ do
     commands <- forM keyCommands $ \KeyCommand{..} ->
         ifKeyWithMods False e kcmModKeys kcmKey
             (return kcmCausesSave)
-    charCommand <- ifChar False e (\_ -> return True)
+    charCommand <- ifText False e (\_ -> return True)
     return $ or (charCommand:commands)
 
 
@@ -141,38 +142,38 @@ type CausesSave = Bool
 data KeyCommand = KeyCommand
     { kcmCausesSave :: CausesSave
     , kcmModKeys    :: [ModKey]
-    , kcmKey        :: Key
+    , kcmKey        :: Keycode
     , kcmAction     :: (TextBuffer -> TextBuffer)
     }
 
 keyCommands :: [KeyCommand]
 keyCommands =
     --           Save? ModKeys                      Key              Action
-    [ KeyCommand False [controlModKey]              Key'C            id -- handled above
-    , KeyCommand True  [controlModKey]              Key'X            id -- handled above
-    , KeyCommand True  [controlModKey]              Key'V            id -- handled above
-    , KeyCommand True  [controlModKey]              Key'Z            undo
-    , KeyCommand True  []                           Key'Enter        carriageReturn
-    , KeyCommand True  [controlModKey]              Key'Enter        carriageReturnToNextLine
-    , KeyCommand True  []                           Key'Backspace    backspace
-    , KeyCommand False []                           Key'Left         moveLeft
-    , KeyCommand False []                           Key'Right        moveRight
-    , KeyCommand False []                           Key'Down         moveDown
-    , KeyCommand False []                           Key'Up           moveUp
-    , KeyCommand False [optionModKey]               Key'Left         moveWordLeft
-    , KeyCommand False [optionModKey]               Key'Right        moveWordRight
-    , KeyCommand False [ModKeyShift]                Key'Left         selectLeft
-    , KeyCommand False [ModKeyShift]                Key'Right        selectRight
-    , KeyCommand False [ModKeyShift]                Key'Up           selectUp
-    , KeyCommand False [ModKeyShift]                Key'Down         selectDown
-    , KeyCommand False [optionModKey, ModKeyShift]  Key'Right        selectWordRight
-    , KeyCommand False [optionModKey, ModKeyShift]  Key'Left         selectWordLeft
-    , KeyCommand False [controlModKey]              Key'B            moveLeft
-    , KeyCommand False [controlModKey]              Key'F            moveRight
-    , KeyCommand True  [controlModKey, ModKeyShift] Key'Up           moveLinesUp
-    , KeyCommand True  [controlModKey, ModKeyShift] Key'Down         moveLinesDown
-    , KeyCommand True  [controlModKey]              Key'RightBracket indentLines
-    , KeyCommand True  [controlModKey]              Key'LeftBracket  unindentLines
-    , KeyCommand True  [controlModKey]              Key'Slash        toggleLinesComment
-    , KeyCommand True  [controlModKey, ModKeyShift] Key'D            duplicateLine
+    [ KeyCommand False [controlModKey]              KeycodeC            id -- handled above
+    , KeyCommand True  [controlModKey]              KeycodeX            id -- handled above
+    , KeyCommand True  [controlModKey]              KeycodeV            id -- handled above
+    , KeyCommand True  [controlModKey]              KeycodeZ            undo
+    , KeyCommand True  []                           KeycodeReturn       carriageReturn
+    , KeyCommand True  [controlModKey]              KeycodeReturn       carriageReturnToNextLine
+    , KeyCommand True  []                           KeycodeBackspace    backspace
+    , KeyCommand False []                           KeycodeLeft         moveLeft
+    , KeyCommand False []                           KeycodeRight        moveRight
+    , KeyCommand False []                           KeycodeDown         moveDown
+    , KeyCommand False []                           KeycodeUp           moveUp
+    , KeyCommand False [optionModKey]               KeycodeLeft         moveWordLeft
+    , KeyCommand False [optionModKey]               KeycodeRight        moveWordRight
+    , KeyCommand False [ModKeyShift]                KeycodeLeft         selectLeft
+    , KeyCommand False [ModKeyShift]                KeycodeRight        selectRight
+    , KeyCommand False [ModKeyShift]                KeycodeUp           selectUp
+    , KeyCommand False [ModKeyShift]                KeycodeDown         selectDown
+    , KeyCommand False [optionModKey, ModKeyShift]  KeycodeRight        selectWordRight
+    , KeyCommand False [optionModKey, ModKeyShift]  KeycodeLeft         selectWordLeft
+    , KeyCommand False [controlModKey]              KeycodeB            moveLeft
+    , KeyCommand False [controlModKey]              KeycodeF            moveRight
+    , KeyCommand True  [controlModKey, ModKeyShift] KeycodeUp           moveLinesUp
+    , KeyCommand True  [controlModKey, ModKeyShift] KeycodeDown         moveLinesDown
+    , KeyCommand True  [controlModKey]              KeycodeRightBracket indentLines
+    , KeyCommand True  [controlModKey]              KeycodeLeftBracket  unindentLines
+    , KeyCommand True  [controlModKey]              KeycodeSlash        toggleLinesComment
+    , KeyCommand True  [controlModKey, ModKeyShift] KeycodeD            duplicateLine
     ]

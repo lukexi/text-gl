@@ -3,12 +3,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Graphics.GL
 import Graphics.GL.Pal
-import Graphics.UI.GLFW.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
+import Graphics.VR.Pal
+import SDL hiding (get)
 
 import Control.Lens.Extra
 import Control.Monad
@@ -16,9 +18,9 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Halive.Utils
 
-data Uniforms = Uniforms 
-  { uMVP   :: UniformLocation (M44 GLfloat) 
-  , uColor :: UniformLocation (V4 GLfloat) 
+data Uniforms = Uniforms
+  { uMVP   :: UniformLocation (M44 GLfloat)
+  , uColor :: UniformLocation (V4 GLfloat)
   } deriving Data
 
 
@@ -29,7 +31,7 @@ fontFile = "test/SourceCodePro-Regular.ttf"
 main :: IO ()
 main = do
 
-    (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
+    VRPal{vrpWindow=window} <- reacquire 0 $ initVRPal "Text GL"
 
     glyphProg     <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
     font          <- createFont fontFile 50 glyphProg
@@ -37,7 +39,7 @@ main = do
     shader     <- createShaderProgram "test/geo.vert" "test/geo.frag"
     planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
     planeShape <- makeShape planeGeo shader
-    
+
     glClearColor 0.1 0.5 0.8 1
     glEnable GL_DEPTH_TEST
 
@@ -54,30 +56,27 @@ main = do
         flip execStateT r (editTextRendererBuffer id $ moveTo (Cursor 0 0))
 
     void . flip runStateT initialState $ do
-        
+
         -- Set the screen size
         txrScreenSize ?= V2 50 50
         id %=~ updateMetrics
 
-        whileWindow win $ 
-            mainLoop win events planeShape
+        whileWindow window $ \events ->
+            mainLoop window events planeShape
 
-handleEvents :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> M44 GLfloat -> M44 GLfloat -> m ()
+handleEvents :: (MonadState TextRenderer m, MonadIO m) => Window -> [Event] -> M44 GLfloat -> M44 GLfloat -> m ()
 handleEvents win events projM44 modelM44 = do
     -- Update the text renderer if needed from file changes
     refreshTextRendererFromFile id
 
     -- Get mouse/keyboard/OS events from GLFW
-    es <- gatherEvents events
-    forM_ es $ \e -> do
-        closeOnEscape win e
-
+    forM_ events $ \e -> do
         _ <- handleTextBufferEvent win e id
         _ <- handleTextBufferMouseEvent win e id projM44 modelM44 newPose
         return ()
 
 
-mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> Events -> Shape Uniforms -> m ()
+mainLoop :: (MonadState TextRenderer m, MonadIO m) => Window -> [Event] -> Shape Uniforms -> m ()
 mainLoop win events planeShape = do
     persistState 1
     (x,y,w,h) <- getWindowViewport win
@@ -90,11 +89,11 @@ mainLoop win events planeShape = do
         viewM44  = viewMatrixFromPose newPose
         projViewM44 = projM44 !*! viewM44
 
-    
+
     let textModelM44 = modelM44
 
     handleEvents win events projM44 textModelM44
-    
+
 
     -- Clear the framebuffer
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
@@ -108,7 +107,7 @@ mainLoop win events planeShape = do
     -- Draw background
     glStencilFunc GL_ALWAYS 1 0xFF          -- Set any stencil to 1
     glStencilMask 0xFF                      -- Write to stencil buffer
-    
+
     withShape planeShape $ do
         Uniforms{..} <- asks sUniforms
         uniformV4 uColor (V4 0.01 0.02 0.05 1)
@@ -121,7 +120,7 @@ mainLoop win events planeShape = do
 
     textRenderer <- get
     renderText textRenderer projViewM44 textModelM44
-    
+
     glDisable GL_STENCIL_TEST
     swapBuffers win
 

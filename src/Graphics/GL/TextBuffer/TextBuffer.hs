@@ -506,7 +506,7 @@ moveLinesWith moveFunc numLinesMoved buffer =
 -- and moves the cursor to the new line
 duplicateLine :: TextBuffer -> TextBuffer
 duplicateLine buffer =
-    let (Cursor startLine startCol, Cursor endLine endCol) = getSelection buffer
+    let (Cursor _startLine _startCol, Cursor endLine endCol) = getSelection buffer
         newSeq       = seqDuplicateIndex endLine (bufText buffer)
         newSelection = (Cursor (endLine + 1) endCol, Cursor (endLine + 1) endCol)
     in (pushUndo buffer) { bufText = newSeq, bufSelection = Just newSelection}

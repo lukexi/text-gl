@@ -32,7 +32,8 @@ library
     , gl
     , linear
     , gl-pal
-    , glfw-pal
+    , vr-pal
+    , sdl2
     , containers
     , mtl
     , random
@@ -40,6 +41,7 @@ library
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text
   exposed-modules:
       Graphics.GL.TextBuffer
       Graphics.GL.TextBuffer.Input
@@ -63,7 +65,8 @@ test-suite basic
     , gl
     , linear
     , gl-pal
-    , glfw-pal
+    , vr-pal
+    , sdl2
     , containers
     , mtl
     , random
@@ -71,6 +74,7 @@ test-suite basic
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text
     , text-gl
   default-language: Haskell2010
 
@@ -87,7 +91,8 @@ test-suite buffer
     , gl
     , linear
     , gl-pal
-    , glfw-pal
+    , vr-pal
+    , sdl2
     , containers
     , mtl
     , random
@@ -95,6 +100,7 @@ test-suite buffer
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text
     , text-gl
   default-language: Haskell2010
 
@@ -111,7 +117,8 @@ test-suite buffer-scroll
     , gl
     , linear
     , gl-pal
-    , glfw-pal
+    , vr-pal
+    , sdl2
     , containers
     , mtl
     , random
@@ -119,6 +126,7 @@ test-suite buffer-scroll
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text
     , text-gl
   default-language: Haskell2010
 
@@ -135,7 +143,8 @@ test-suite scaling
     , gl
     , linear
     , gl-pal
-    , glfw-pal
+    , vr-pal
+    , sdl2
     , containers
     , mtl
     , random
@@ -143,5 +152,6 @@ test-suite scaling
     , halive
     , linear-extra
     , freetype-gl-mini
+    , text
     , text-gl
   default-language: Haskell2010

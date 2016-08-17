@@ -14,48 +14,50 @@ ghc-options:         -Wall -O2
 
 dependencies:
   - base
-  - stm 
-  - gl 
-  - linear 
+  - stm
+  - gl
+  - linear
   - gl-pal
-  - glfw-pal 
-  - containers 
-  - mtl 
-  - random 
-  - lens-extra 
-  - halive 
+  - vr-pal
+  - sdl2
+  - containers
+  - mtl
+  - random
+  - lens-extra
+  - halive
   - linear-extra
   - freetype-gl-mini
+  - text
 
 library:
   source-dirs:
-    - src  
+    - src
 
 tests:
   basic:
     ghc-options: -threaded -rtsopts
-    source-dirs: 
+    source-dirs:
       - test
     main: TestBasic.hs
     other-modules: []
     dependencies: text-gl
   scaling:
     ghc-options: -threaded -rtsopts
-    source-dirs: 
+    source-dirs:
       - test
     main: TestScaling.hs
     other-modules: []
     dependencies: text-gl
   buffer:
     ghc-options: -threaded -rtsopts
-    source-dirs: 
+    source-dirs:
       - test
     main: TestBuffer.hs
     other-modules: []
     dependencies: text-gl
   buffer-scroll:
     ghc-options: -threaded -rtsopts
-    source-dirs: 
+    source-dirs:
       - test
     main: TestBufferScroll.hs
     other-modules: []

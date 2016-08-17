@@ -9,7 +9,6 @@ import Control.Lens.Extra
 
 import Control.Monad.Reader
 import Control.Concurrent.STM
-import Control.Concurrent
 
 import Graphics.GL.Freetype.Types
 import Graphics.GL.Freetype.API
@@ -17,7 +16,6 @@ import Graphics.GL.TextBuffer.Metrics
 import Graphics.GL.TextBuffer.TextBuffer
 import Graphics.GL.TextBuffer.Types
 
-import Debug.Trace
 import Data.Maybe
 
 -- Reserve space for 20000 characters
@@ -57,6 +55,7 @@ createTextRenderer font textBuffer = do
 -- chan. When the render chan ticks, it skips to the very latest item on that channel and uploads that.
 -- This way the latest text is always uploaded, and as long as the render thread ticks more quickly than
 -- text renderer changes are occurring, everything should be fine.
+updateRenderResources :: MonadIO m => TextRenderer -> m VertexArrayObject
 updateRenderResources textRenderer = liftIO $ do
     resources <- acquireRenderResources textRenderer
 
@@ -71,6 +70,7 @@ updateRenderResources textRenderer = liftIO $ do
         bufferSubData (resources ^. trrOffsetBuffer) (take maxTextRendererChars $ map snd (txmCharOffsets textMetrics))
     return (resources ^. trrVAO)
 
+acquireRenderResources :: TextRenderer -> IO TextRendererResources
 acquireRenderResources textRenderer = do
     let renderResourcesVar = textRenderer ^. txrRenderResourcesVar
     mResources <- atomically $ tryReadTMVar renderResourcesVar

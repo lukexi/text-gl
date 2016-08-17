@@ -1,12 +1,13 @@
-
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
+import Graphics.VR.Pal
+import SDL hiding (get)
 
 import Control.Monad.State
 import Control.Monad.Reader
@@ -15,9 +16,9 @@ import System.Random
 import Halive.Utils
 
 
-data Uniforms = Uniforms 
-  { uMVP   :: UniformLocation (M44 GLfloat) 
-  , uColor :: UniformLocation (V4 GLfloat) 
+data Uniforms = Uniforms
+  { uMVP   :: UniformLocation (M44 GLfloat)
+  , uColor :: UniformLocation (V4 GLfloat)
   } deriving Data
 
 -------------------------------------------------------------
@@ -27,29 +28,29 @@ data Uniforms = Uniforms
 frameChars = unlines
     [ "X"
     , "$MALL"
-    , "Hello" 
-    , "What's" 
-    --, "Up" 
-    --, "Doc" 
-    --, "Who's~~~~~~~~~~~" 
-    --, "The" 
-    --, "Best" 
-    --, "Around" 
+    , "Hello"
+    , "What's"
+    --, "Up"
+    --, "Doc"
+    --, "Who's~~~~~~~~~~~"
+    --, "The"
+    --, "Best"
+    --, "Around"
     ]
 
 main :: IO ()
 main = do
 
-    (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
+    VRPal{vrpWindow=window} <- reacquire 0 $ initVRPal "Text GL"
 
-    glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
-    font      <- createFont "test/SourceCodePro-Regular.ttf" 100 glyphProg
+    glyphProg  <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
+    font       <- createFont "test/SourceCodePro-Regular.ttf" 100 glyphProg
 
     shader     <- createShaderProgram "test/geo.vert" "test/geo.frag"
     planeGeo   <- planeGeometry 1 (V3 0 0 1) (V3 0 1 0) 5
     planeShape <- makeShape planeGeo shader
 
-    
+
     glClearColor 0 0.1 0.1 1
     -- glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
@@ -58,11 +59,11 @@ main = do
 
     textRenderer <- createTextRenderer font (textBufferFromString frameChars)
 
-    void . flip runStateT textRenderer . whileWindow win $ 
-        mainLoop win events font planeShape
+    void . flip runStateT textRenderer . whileWindow window $ \events ->
+        mainLoop window events font planeShape
 
 
-mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> Font -> Shape Uniforms -> m ()
+mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> [Event] -> Font -> Shape Uniforms -> m ()
 mainLoop win events font planeShape = do
     --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
@@ -93,7 +94,7 @@ mainLoop win events font planeShape = do
     -- Draw background
     glStencilFunc GL_ALWAYS 1 0xFF          -- Set any stencil to 1
     glStencilMask 0xFF                      -- Write to stencil buffer
-    
+
     withShape planeShape $ do
         Uniforms{..} <- asks sUniforms
         uniformV4 uColor (V4 0.2 0.5 0.2 1)
@@ -108,7 +109,7 @@ mainLoop win events font planeShape = do
     -- Leaving this here so we can test updating chars later
     --txrTextBuffer .= textBufferFromString frameChars
     --put =<< updateMetrics =<< get
-    
+
 
     -- Draw clipped thing
     glStencilFunc GL_EQUAL 1 0xFF -- Pass test if stencil value is 1
@@ -123,8 +124,8 @@ mainLoop win events font planeShape = do
         scrollM44 = translateMatrix (V3 (scrollColumns * charWidthGL) scrollLines 0)
 
     renderText textRenderer projView44 (model44 !*! scaleMatrix (recip numLines) !*! scrollM44)
-    
+
     glDisable GL_STENCIL_TEST
 
-    swapBuffers win
+    glSwapWindow win
 

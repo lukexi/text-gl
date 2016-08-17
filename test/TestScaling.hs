@@ -1,12 +1,13 @@
-
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-import Graphics.UI.GLFW.Pal
 import Graphics.GL.Pal
 import Graphics.GL.Freetype
 import Graphics.GL.TextBuffer
+import Graphics.VR.Pal
+import SDL hiding (get)
 
 import Control.Monad.State
 import Control.Monad.Reader
@@ -15,9 +16,9 @@ import System.Random
 import Halive.Utils
 
 
-data Uniforms = Uniforms 
-  { uMVP   :: UniformLocation (M44 GLfloat) 
-  , uColor :: UniformLocation (V4 GLfloat) 
+data Uniforms = Uniforms
+  { uMVP   :: UniformLocation (M44 GLfloat)
+  , uColor :: UniformLocation (V4 GLfloat)
   } deriving Data
 
 -------------------------------------------------------------
@@ -27,20 +28,20 @@ data Uniforms = Uniforms
 frameChars = unlines
     [ "X"
     --, "$MALL"
-    --, "Hello" 
-    --, "What's" 
-    --, "Up" 
-    --, "Doc" 
-    --, "Who's~~~~~~~~~~~" 
-    --, "The" 
-    --, "Best" 
-    --, "Around" 
+    --, "Hello"
+    --, "What's"
+    --, "Up"
+    --, "Doc"
+    --, "Who's~~~~~~~~~~~"
+    --, "The"
+    --, "Best"
+    --, "Around"
     ]
 
 main :: IO ()
 main = do
 
-    (win, events) <- reacquire 0 $ createWindow "Freetype-GL" 1024 768
+    VRPal{vrpWindow=window} <- reacquire 0 $ initVRPal "Text GL"
 
     glyphProg <- createShaderProgram "test/glyph.vert" "test/glyph.frag"
     font      <- createFont "freetype-gl/fonts/SourceCodePro-Regular.ttf" 100 glyphProg
@@ -57,11 +58,11 @@ main = do
 
     textRenderer <- createTextRenderer font (textBufferFromString frameChars)
 
-    void . flip runStateT textRenderer . whileWindow win $ 
-        mainLoop win events planeShape
+    void . flip runStateT textRenderer . whileWindow window $ \events ->
+        mainLoop window events planeShape
 
 
-mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> Events -> Shape Uniforms -> m ()
+mainLoop :: (MonadIO m, MonadState TextRenderer m) => Window -> [Event] -> Shape Uniforms -> m ()
 mainLoop win events planeShape = do
     --glGetErrors
     -- Get mouse/keyboard/OS events from GLFW
@@ -85,7 +86,7 @@ mainLoop win events planeShape = do
         mvpX         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 1 0.002 1)
         mvpY         = projection44 !*! view44 !*! model44 !*! scaleMatrix (V3 0.002 1 1)
 
-    
+
     withShape planeShape $ do
         Uniforms{..} <- asks sUniforms
         uniformV4 uColor (V4 0.2 0.5 0.2 1)
@@ -100,9 +101,8 @@ mainLoop win events planeShape = do
     -- Leaving this here so we can test updating chars later
     --txrTextBuffer .= textBufferFromString frameChars
     --put =<< updateMetrics =<< get
-    
+
     textRenderer <- use id
     renderText textRenderer projView44 model44
-    
-    swapBuffers win
 
+    glSwapWindow win
